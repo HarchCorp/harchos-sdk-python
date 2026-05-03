@@ -1,0 +1,28 @@
+# Codeowners for HarchOS SDK Python
+
+# Default owners for everything
+* @VitalCheffe @HarchCorp/core
+
+# Core SDK modules
+/src/harchos/client.py @VitalCheffe @HarchCorp/sdk-maintainers
+/src/harchos/_http.py  @VitalCheffe @HarchCorp/sdk-maintainers
+/src/harchos/_retry.py @VitalCheffe @HarchCorp/sdk-maintainers
+
+# Authentication
+/src/harchos/auth.py @VitalCheffe @HarchCorp/security
+
+# Configuration
+/src/harchos/config.py @VitalCheffe @HarchCorp/sdk-maintainers
+
+# Models and sovereignty
+/src/harchos/models/ @VitalCheffe @HarchCorp/sovereignty-team
+/src/harchos/errors.py @VitalCheffe @HarchCorp/sdk-maintainers
+
+# Resources
+/src/harchos/resources/ @VitalCheffe @HarchCorp/sdk-maintainers
+
+# Tests
+/tests/ @VitalCheffe @HarchCorp/qa
+
+# CI/CD
+/.github/ @VitalCheffe @HarchCorp/devops
