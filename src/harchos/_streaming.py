@@ -129,6 +129,29 @@ class SSEParser:
             Any remaining events that were not yet dispatched.
         """
         events: list[SSEEvent] = []
+
+        # Process any remaining buffered content
+        if self._buffer.strip():
+            remaining = self._buffer.rstrip("\r\n")
+            if ":" in remaining:
+                field, _, value = remaining.partition(":")
+                value = value.lstrip(" ")
+            else:
+                field = remaining
+                value = ""
+
+            if field == "data":
+                self._data_lines.append(value)
+            elif field == "event":
+                self._event = value
+            elif field == "id":
+                self._last_event_id = value
+            elif field == "retry":
+                with contextlib.suppress(ValueError):
+                    self._retry = int(value)
+
+            self._buffer = ""
+
         if self._data_lines:
             data = "\n".join(self._data_lines)
             event = SSEEvent(

@@ -115,35 +115,40 @@ class BadRequestError(HarchOSError):
     """Raised when the API returns HTTP 400."""
 
     def __init__(self, message: str = "Bad request", **kwargs: Any) -> None:
-        super().__init__(message, code="bad_request", status_code=400, **kwargs)
+        kwargs.setdefault("status_code", 400)
+        super().__init__(message, code="bad_request", **kwargs)
 
 
 class UnauthorizedError(AuthenticationError):
     """Raised when the API returns HTTP 401."""
 
     def __init__(self, message: str = "Unauthorized", **kwargs: Any) -> None:
-        super().__init__(message, code="unauthorized", status_code=401, **kwargs)
+        kwargs.setdefault("status_code", 401)
+        super().__init__(message, code="unauthorized", **kwargs)
 
 
 class ForbiddenError(HarchOSError):
     """Raised when the API returns HTTP 403."""
 
     def __init__(self, message: str = "Forbidden", **kwargs: Any) -> None:
-        super().__init__(message, code="forbidden", status_code=403, **kwargs)
+        kwargs.setdefault("status_code", 403)
+        super().__init__(message, code="forbidden", **kwargs)
 
 
 class NotFoundError(HarchOSError):
     """Raised when the requested resource does not exist (HTTP 404)."""
 
     def __init__(self, message: str = "Resource not found", **kwargs: Any) -> None:
-        super().__init__(message, code="not_found", status_code=404, **kwargs)
+        kwargs.setdefault("status_code", 404)
+        super().__init__(message, code="not_found", **kwargs)
 
 
 class ConflictError(HarchOSError):
     """Raised when a conflict prevents the operation (HTTP 409)."""
 
     def __init__(self, message: str = "Conflict", **kwargs: Any) -> None:
-        super().__init__(message, code="conflict", status_code=409, **kwargs)
+        kwargs.setdefault("status_code", 409)
+        super().__init__(message, code="conflict", **kwargs)
 
 
 class RateLimitError(HarchOSError):
@@ -161,7 +166,8 @@ class RateLimitError(HarchOSError):
         **kwargs: Any,
     ) -> None:
         self.retry_after = retry_after
-        super().__init__(message, code="rate_limit", status_code=429, **kwargs)
+        kwargs.setdefault("status_code", 429)
+        super().__init__(message, code="rate_limit", **kwargs)
 
 
 class InternalServerError(HarchOSError):
@@ -170,7 +176,8 @@ class InternalServerError(HarchOSError):
     def __init__(
         self, message: str = "Internal server error", **kwargs: Any
     ) -> None:
-        super().__init__(message, code="internal_server_error", status_code=500, **kwargs)
+        kwargs.setdefault("status_code", 500)
+        super().__init__(message, code="internal_server_error", **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +192,8 @@ class SovereigntyError(HarchOSError):
         message: str = "Operation violates sovereignty constraints",
         **kwargs: Any,
     ) -> None:
-        super().__init__(message, code="sovereignty_violation", **kwargs)
+        kwargs.setdefault("code", "sovereignty_violation")
+        super().__init__(message, **kwargs)
 
 
 class DataResidencyError(SovereigntyError):

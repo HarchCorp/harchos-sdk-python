@@ -51,7 +51,7 @@ class TestHarchOSConfig:
         config = HarchOSConfig(base_url="https://api.harchos.io/v1/")
         assert config.base_url == "https://api.harchos.io/v1"
 
-    def test_api_key_strip_whitespace(self) -> None:
+    def test_api_key_strip_whitespace(self, clean_env: None) -> None:
         config = HarchOSConfig(api_key="  hsk_testkey1234567890  ")
         assert config.api_key == "hsk_testkey1234567890"
 

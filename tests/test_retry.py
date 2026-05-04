@@ -74,7 +74,10 @@ class TestRetryConfig:
         assert config.is_retryable(error)
 
     def test_custom_status_codes(self) -> None:
-        config = RetryConfig(retryable_status_codes={429, 502})
+        config = RetryConfig(
+            retryable_status_codes={429, 502},
+            retryable_exceptions=set(),
+        )
         assert config.is_retryable(RateLimitError())
         assert not config.is_retryable(InternalServerError())
 

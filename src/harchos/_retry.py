@@ -64,8 +64,12 @@ class RetryConfig:
         self.backoff_factor = backoff_factor
         self.jitter = jitter
         self.jitter_range = jitter_range
-        self.retryable_status_codes = retryable_status_codes or {429, 500, 502, 503, 504}
-        self.retryable_exceptions = retryable_exceptions or {
+        self.retryable_status_codes = (
+            retryable_status_codes
+            if retryable_status_codes is not None
+            else {429, 500, 502, 503, 504}
+        )
+        self.retryable_exceptions = retryable_exceptions if retryable_exceptions is not None else {
             InternalServerError,
             ServiceUnavailableError,
             HarchOSTimeoutError,
