@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 
 import httpx
 
+from ._logging import get_logger
 from ._retry import RetryConfig, retry_async, retry_sync
 from .auth import Authenticator
 from .config import HarchOSConfig
@@ -21,6 +22,8 @@ from .errors import (
     TimeoutError as HarchOSTimeoutError,
 )
 from .errors import raise_for_status
+
+logger = get_logger("http")
 
 # ---------------------------------------------------------------------------
 # User-Agent
@@ -160,6 +163,8 @@ class HttpTransport:
         if headers:
             request_headers.update(headers)
 
+        logger.debug("Async %s %s params=%s", method, path, params)
+
         async def _do_request() -> httpx.Response:
             try:
                 response = await client.request(
@@ -181,6 +186,13 @@ class HttpTransport:
                 raise HarchOSConnectionError(
                     f"HTTP error communicating with HarchOS API: {exc}"
                 ) from exc
+
+            logger.debug(
+                "Response: %s %s -> %d",
+                method,
+                path,
+                response.status_code,
+            )
 
             # Check for errors
             if response.status_code >= 400:
@@ -261,6 +273,8 @@ class HttpTransport:
         if headers:
             request_headers.update(headers)
 
+        logger.debug("Sync %s %s params=%s", method, path, params)
+
         def _do_request() -> httpx.Response:
             try:
                 response = client.request(
@@ -282,6 +296,13 @@ class HttpTransport:
                 raise HarchOSConnectionError(
                     f"HTTP error communicating with HarchOS API: {exc}"
                 ) from exc
+
+            logger.debug(
+                "Response: %s %s -> %d",
+                method,
+                path,
+                response.status_code,
+            )
 
             if response.status_code >= 400:
                 error_body: Any = None

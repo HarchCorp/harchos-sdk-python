@@ -49,6 +49,24 @@ class PaginatedResponse(HarchOSBaseModel, Generic[T]):
     items: List[Any] = Field(default_factory=list, description="Items on this page")
     pagination: PaginationMeta = Field(..., description="Pagination metadata")
 
+    def to_dataframe(self) -> "Any":
+        """Convert paginated results to a pandas DataFrame.
+
+        Requires the 'pandas' extra: pip install harchos[pandas]
+
+        Raises:
+            ImportError: If pandas is not installed
+        """
+        try:
+            import pandas as pd
+        except ImportError:
+            raise ImportError(
+                "pandas is required for to_dataframe(). "
+                "Install it with: pip install harchos[pandas]"
+            ) from None
+        items = self.items if hasattr(self, "items") else []
+        return pd.DataFrame([item.model_dump() for item in items])
+
 
 # ---------------------------------------------------------------------------
 # Common fields
@@ -58,6 +76,7 @@ class ResourceMetadata(HarchOSBaseModel):
     """Standard metadata attached to every HarchOS resource."""
 
     id: str = Field(..., min_length=1, description="Unique resource identifier")
+    name: Optional[str] = Field(default=None, description="Resource name")
     created_at: datetime = Field(..., description="Creation timestamp (UTC)")
     updated_at: Optional[datetime] = Field(default=None, description="Last update timestamp (UTC)")
     labels: Dict[str, str] = Field(default_factory=dict, description="Arbitrary key-value labels")

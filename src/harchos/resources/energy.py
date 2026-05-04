@@ -54,8 +54,8 @@ class EnergyResource(BaseResource):
         if period_end:
             params["period_end"] = period_end.isoformat()
 
-        data = await self._async_get(
-            resource_id, path=f"/energy/reports/{resource_id}"
+        data = await self._async_list(
+            path=f"/energy/reports/{resource_id}", params=params or None
         )
         return EnergyReport.model_validate(data)
 
@@ -156,7 +156,17 @@ class EnergyResource(BaseResource):
         period_end: Optional[datetime] = None,
     ) -> EnergyReport:
         """Get an energy report for a specific resource (sync)."""
-        data = self._sync_get(resource_id, path=f"/energy/reports/{resource_id}")
+        params: Dict[str, Any] = {}
+        if resource_type:
+            params["resource_type"] = resource_type
+        if period_start:
+            params["period_start"] = period_start.isoformat()
+        if period_end:
+            params["period_end"] = period_end.isoformat()
+
+        data = self._sync_list(
+            path=f"/energy/reports/{resource_id}", params=params or None
+        )
         return EnergyReport.model_validate(data)
 
     def get_summary(

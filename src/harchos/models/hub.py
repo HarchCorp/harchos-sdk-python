@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import Field, field_validator, model_validator
 
@@ -156,3 +156,20 @@ class HubList(HarchOSBaseModel):
 
     items: List[Hub] = Field(default_factory=list, description="Hub items")
     total: int = Field(default=0, ge=0, description="Total count")
+
+    def to_dataframe(self) -> Any:
+        """Convert hub list to a pandas DataFrame.
+
+        Requires the 'pandas' extra: pip install harchos[pandas]
+
+        Raises:
+            ImportError: If pandas is not installed
+        """
+        try:
+            import pandas as pd
+        except ImportError:
+            raise ImportError(
+                "pandas is required for to_dataframe(). "
+                "Install it with: pip install harchos[pandas]"
+            ) from None
+        return pd.DataFrame([item.model_dump() for item in self.items])

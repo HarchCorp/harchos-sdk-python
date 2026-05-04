@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import Field, field_validator
 
@@ -176,3 +176,20 @@ class ModelList(HarchOSBaseModel):
 
     items: List[Model] = Field(default_factory=list, description="Model items")
     total: int = Field(default=0, ge=0, description="Total count")
+
+    def to_dataframe(self) -> Any:
+        """Convert model list to a pandas DataFrame.
+
+        Requires the 'pandas' extra: pip install harchos[pandas]
+
+        Raises:
+            ImportError: If pandas is not installed
+        """
+        try:
+            import pandas as pd
+        except ImportError:
+            raise ImportError(
+                "pandas is required for to_dataframe(). "
+                "Install it with: pip install harchos[pandas]"
+            ) from None
+        return pd.DataFrame([item.model_dump() for item in self.items])

@@ -71,6 +71,7 @@ def sample_workload_data() -> Dict[str, Any]:
     return {
         "metadata": {
             "id": "wl_abc123",
+            "name": "gpt4-training-run",
             "created_at": "2024-01-15T10:30:00Z",
             "updated_at": "2024-01-15T10:35:00Z",
             "labels": {"team": "ml", "env": "prod"},
@@ -102,6 +103,7 @@ def sample_model_data() -> Dict[str, Any]:
     return {
         "metadata": {
             "id": "mdl_def456",
+            "name": "harchos-llm-v1",
             "created_at": "2024-01-10T08:00:00Z",
             "labels": {},
             "annotations": {},
@@ -129,6 +131,7 @@ def sample_hub_data() -> Dict[str, Any]:
     return {
         "metadata": {
             "id": "hub_xyz789",
+            "name": "morocco-primary",
             "created_at": "2024-01-05T12:00:00Z",
             "labels": {"region": "morocco"},
             "annotations": {},

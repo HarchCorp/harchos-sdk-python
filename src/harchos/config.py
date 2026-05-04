@@ -7,6 +7,7 @@ persistent profiles stored as JSON.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import pathlib
@@ -152,9 +153,16 @@ class HarchOSConfig(BaseModel):
 
     @model_validator(mode="after")
     def _apply_profile_and_env(self) -> "HarchOSConfig":
-        """Overlay profile and environment variable values where not explicitly set."""
+        """Overlay profile and environment variable values where not explicitly set.
+
+        Priority order (highest to lowest):
+        1. Constructor arguments (explicitly set fields)
+        2. Environment variables (HARCHOS_*)
+        3. Profile values
+        4. Built-in defaults
+        """
         # Load profile if specified
-        if self.profile:
+        if self.profile and self.profile != "default":
             profile_data = _load_profile(self.profile)
             if profile_data:
                 for key, value in profile_data.items():
@@ -163,38 +171,34 @@ class HarchOSConfig(BaseModel):
                     if not hasattr(self, key):
                         continue
                     # Only override if the field is still at its default
-                    field_info = self.model_fields.get(key)
-                    if field_info is not None:
+                    field_info = HarchOSConfig.model_fields.get(key)
+                    if field_info is not None and key not in self.model_fields_set:
                         current = getattr(self, key)
                         if current == field_info.default and value is not None:
                             object.__setattr__(self, key, value)
 
-        # Overlay environment variables
-        env_map: Dict[str, str] = {
-            "base_url": "HARCHOS_BASE_URL",
-            "region": "HARCHOS_REGION",
-            "api_key": "HARCHOS_API_KEY",
-            "timeout": "HARCHOS_TIMEOUT",
-            "max_retries": "HARCHOS_MAX_RETRIES",
-            "sovereignty": "HARCHOS_SOVEREIGNTY",
+        # Apply environment variables ONLY for fields not explicitly set by constructor
+        env_mapping: Dict[str, tuple[str, type]] = {
+            "HARCHOS_API_KEY": ("api_key", str),
+            "HARCHOS_BASE_URL": ("base_url", str),
+            "HARCHOS_REGION": ("region", str),
+            "HARCHOS_SOVEREIGNTY": ("sovereignty", str),
+            "HARCHOS_TIMEOUT": ("timeout", float),
+            "HARCHOS_MAX_RETRIES": ("max_retries", int),
         }
-        for field_name, env_var in env_map.items():
-            env_value = os.environ.get(env_var)
-            if env_value is not None:
-                field_info = self.model_fields.get(field_name)
-                if field_info is not None:
-                    # Type coerce
-                    if field_name in ("timeout",):
-                        try:
-                            env_value = float(env_value)  # type: ignore[assignment]
-                        except ValueError:
-                            continue
-                    elif field_name in ("max_retries",):
-                        try:
-                            env_value = int(env_value)  # type: ignore[assignment]
-                        except ValueError:
-                            continue
-                    object.__setattr__(self, field_name, env_value)
+
+        for env_var, (field_name, field_type) in env_mapping.items():
+            if field_name not in self.model_fields_set:  # Only override if not explicitly set
+                env_val = os.environ.get(env_var)
+                if env_val is not None:
+                    if field_type is int:
+                        with contextlib.suppress(ValueError):
+                            setattr(self, field_name, int(env_val))
+                    elif field_type is float:
+                        with contextlib.suppress(ValueError):
+                            setattr(self, field_name, float(env_val))
+                    else:
+                        setattr(self, field_name, env_val)
 
         return self
 

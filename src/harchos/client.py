@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any, AsyncIterator, Dict, Optional, Type, TypeVar
 
 from ._http import HttpTransport
+from ._logging import get_logger
 from ._retry import RetryConfig
 from ._streaming import async_stream_request
 from .auth import Authenticator
@@ -18,6 +19,8 @@ from .resources.energy import EnergyResource
 from .resources.hubs import HubsResource
 from .resources.models import ModelsResource
 from .resources.workloads import WorkloadsResource
+
+logger = get_logger("client")
 
 T = TypeVar("T")
 
@@ -116,6 +119,13 @@ class HarchOSClient:
         self._models = ModelsResource(self._transport)
         self._hubs = HubsResource(self._transport)
         self._energy = EnergyResource(self._transport)
+
+        logger.debug(
+            "HarchOSClient initialized: base_url=%s region=%s sovereignty=%s",
+            self._config.base_url,
+            self._config.region,
+            self._config.sovereignty,
+        )
 
     # ------------------------------------------------------------------
     # Properties

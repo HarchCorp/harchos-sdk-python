@@ -18,6 +18,7 @@ Example::
         workloads = await client.workloads.async_list()
 """
 
+from ._logging import configure_logging, get_logger
 from .auth import Authenticator
 from .client import HarchOSClient
 from .config import HarchOSConfig, Profile
@@ -90,6 +91,9 @@ __all__ = [
     # Config
     "HarchOSConfig",
     "Profile",
+    # Logging
+    "configure_logging",
+    "get_logger",
     # Errors
     "APIKeyExpiredError",
     "AuthenticationError",

@@ -11,6 +11,7 @@ import random
 import time
 from typing import Any, Awaitable, Callable, Optional, Set, Type
 
+from ._logging import get_logger
 from .errors import (
     HarchOSError,
     InternalServerError,
@@ -18,6 +19,8 @@ from .errors import (
     ServiceUnavailableError,
 )
 from .errors import TimeoutError as HarchOSTimeoutError
+
+logger = get_logger("retry")
 
 # ---------------------------------------------------------------------------
 # Types
@@ -163,6 +166,13 @@ async def retry_async(
             if on_retry is not None:
                 on_retry(attempt, exc, delay)
 
+            logger.info(
+                "Retry attempt %d after %.2fs: %s",
+                attempt + 1,
+                delay,
+                exc,
+            )
+
             await asyncio.sleep(delay)
 
     # Should never reach here, but satisfy type checker
@@ -209,6 +219,13 @@ def retry_sync(
 
             if on_retry is not None:
                 on_retry(attempt, exc, delay)
+
+            logger.info(
+                "Retry attempt %d after %.2fs: %s",
+                attempt + 1,
+                delay,
+                exc,
+            )
 
             time.sleep(delay)
 

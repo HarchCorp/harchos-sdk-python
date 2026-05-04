@@ -14,6 +14,9 @@ from typing import Any, AsyncIterator, Dict, Optional, Type, TypeVar
 import httpx
 
 from ._http import HttpTransport
+from ._logging import get_logger
+
+logger = get_logger("streaming")
 
 T = TypeVar("T")
 
@@ -264,8 +267,10 @@ async def async_stream_request(
     )
 
     response = await client.send(request, stream=True)
+    logger.debug("Streaming connection opened: %s %s", method, path)
     try:
         async for item in stream_json(response, model_class=model_class):
             yield item
     finally:
+        logger.debug("Streaming connection closed: %s %s", method, path)
         await response.aclose()
