@@ -18,8 +18,8 @@ import pytest
 from harchos._logging import configure_logging, get_logger
 from harchos.config import HarchOSConfig
 from harchos.models.common import PaginatedResponse, PaginationMeta, ResourceMetadata
-from harchos.models.hub import Hub, HubList
-from harchos.models.model import Model, ModelList
+from harchos.models.hub import HubList
+from harchos.models.model import ModelList
 from harchos.models.workload import Workload, WorkloadList
 
 
