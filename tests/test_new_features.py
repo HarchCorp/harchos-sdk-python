@@ -22,7 +22,6 @@ from harchos.models.hub import HubList
 from harchos.models.model import ModelList
 from harchos.models.workload import Workload, WorkloadList
 
-
 # ---------------------------------------------------------------------------
 # ResourceMetadata.name
 # ---------------------------------------------------------------------------
@@ -147,8 +146,8 @@ class TestToDataframe:
     def test_to_dataframe_without_pandas_raises(self) -> None:
         """to_dataframe() should raise ImportError when pandas is not installed."""
         wl_list = WorkloadList(items=[], total=0)
-        with patch.dict("sys.modules", {"pandas": None}):
-            with pytest.raises(ImportError, match="pandas is required"):
+        with patch.dict("sys.modules", {"pandas": None}), \
+             pytest.raises(ImportError, match="pandas is required"):
                 wl_list.to_dataframe()
 
     def test_to_dataframe_with_mock_pandas(self) -> None:
