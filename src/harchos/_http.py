@@ -7,7 +7,7 @@ Provides both async and sync HTTP clients.
 from __future__ import annotations
 
 import json as json_module
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 import httpx
 
@@ -16,10 +16,11 @@ from .auth import Authenticator
 from .config import HarchOSConfig
 from .errors import (
     ConnectionError as HarchOSConnectionError,
-    HarchOSError,
-    TimeoutError as HarchOSTimeoutError,
-    raise_for_status,
 )
+from .errors import (
+    TimeoutError as HarchOSTimeoutError,
+)
+from .errors import raise_for_status
 
 # ---------------------------------------------------------------------------
 # User-Agent
@@ -188,7 +189,11 @@ class HttpTransport:
                 try:
                     error_body = response.json()
                     if isinstance(error_body, dict):
-                        error_message = error_body.get("message", error_body.get("error", error_message))
+                        error_message = (
+                            error_body.get("message")
+                            or error_body.get("error")
+                            or error_message
+                        )
                 except (json_module.JSONDecodeError, ValueError):
                     error_body = response.text
 
@@ -284,7 +289,11 @@ class HttpTransport:
                 try:
                     error_body = response.json()
                     if isinstance(error_body, dict):
-                        error_message = error_body.get("message", error_body.get("error", error_message))
+                        error_message = (
+                            error_body.get("message")
+                            or error_body.get("error")
+                            or error_message
+                        )
                 except (json_module.JSONDecodeError, ValueError):
                     error_body = response.text
 

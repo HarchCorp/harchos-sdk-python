@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
-from typing import Any, Dict, Literal, Optional, Union
+from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 

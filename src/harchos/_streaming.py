@@ -6,14 +6,14 @@ for consuming streaming responses from the HarchOS API.
 
 from __future__ import annotations
 
+import contextlib
 import json as json_module
-from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Callable, Dict, Optional, Type, TypeVar
+from dataclasses import dataclass
+from typing import Any, AsyncIterator, Dict, Optional, Type, TypeVar
 
 import httpx
 
 from ._http import HttpTransport
-from .errors import HarchOSError
 
 T = TypeVar("T")
 
@@ -117,10 +117,8 @@ class SSEParser:
             elif field == "id":
                 self._last_event_id = value
             elif field == "retry":
-                try:
+                with contextlib.suppress(ValueError):
                     self._retry = int(value)
-                except ValueError:
-                    pass
 
         return events
 

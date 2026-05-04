@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from harchos import HarchOSClient
-from harchos.models.workload import Workload, WorkloadList, WorkloadSpec, WorkloadType, WorkloadStatus
+from harchos.models.workload import (
+    Workload,
+    WorkloadList,
+    WorkloadSpec,
+    WorkloadStatus,
+    WorkloadType,
+)
 
 
 class TestWorkloadsAsync:

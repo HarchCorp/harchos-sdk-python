@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, Generic, List, Optional, TypeVar
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 T = TypeVar("T")
 
@@ -90,7 +90,9 @@ class ErrorDetail(HarchOSBaseModel):
     code: str = Field(..., description="Machine-readable error code")
     message: str = Field(..., description="Human-readable error message")
     details: Optional[Dict[str, Any]] = Field(default=None, description="Additional error context")
-    field: Optional[str] = Field(default=None, description="Field that caused the error (if applicable)")
+    field: Optional[str] = Field(
+        default=None, description="Field that caused the error (if applicable)"
+    )
 
 
 # ---------------------------------------------------------------------------

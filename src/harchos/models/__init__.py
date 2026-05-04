@@ -5,8 +5,8 @@ Re-exports all model classes for convenient access.
 
 from .common import (
     APIResponse,
-    ErrorResponse,
     ErrorDetail,
+    ErrorResponse,
     HarchOSBaseModel,
     HealthStatus,
     PaginatedResponse,

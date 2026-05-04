@@ -7,6 +7,7 @@ from :class:`HarchOSError` for easy catch-all handling.
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any, Dict, Optional
 
 
@@ -289,9 +290,7 @@ def raise_for_status(
     if status_code == 429 and headers:
         retry_after_str = headers.get("retry-after") or headers.get("Retry-After")
         if retry_after_str:
-            try:
+            with contextlib.suppress(ValueError):
                 kwargs["retry_after"] = float(retry_after_str)
-            except ValueError:
-                pass
 
     raise error_cls(message, **kwargs)

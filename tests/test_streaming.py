@@ -26,7 +26,7 @@ class TestSSEEvent:
     def test_json_invalid(self) -> None:
         event = SSEEvent(data="not json")
         with pytest.raises(ValueError):
-            event.json
+            event.json  # noqa: B018
 
 
 class TestSSEParser:

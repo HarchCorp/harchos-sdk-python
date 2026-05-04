@@ -5,10 +5,9 @@ Provides common CRUD operations and pagination support.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Type, TypeVar
+from typing import Any, Dict, Optional, Type, TypeVar
 
 from .._http import HttpTransport
-from ..models.common import PaginatedResponse, PaginationMeta
 
 T = TypeVar("T")
 

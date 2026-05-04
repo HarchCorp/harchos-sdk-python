@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from harchos import HarchOSClient
-from harchos.models.hub import Hub, HubCapacity, HubList, HubSpec, HubStatus, HubTier
+from harchos.models.hub import Hub, HubCapacity, HubList, HubSpec, HubStatus
 
 
 class TestHubsAsync:

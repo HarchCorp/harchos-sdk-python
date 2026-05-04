@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from ..models.model import (
     Model,
+    ModelFramework,
     ModelList,
     ModelSpec,
     ModelStatus,
     ModelTask,
-    ModelFramework,
 )
 from .base import BaseResource
 
@@ -58,9 +58,13 @@ class ModelsResource(BaseResource):
         if task is not None:
             params["task"] = task.value if isinstance(task, ModelTask) else task
         if framework is not None:
-            params["framework"] = framework.value if isinstance(framework, ModelFramework) else framework
+            params["framework"] = (
+                framework.value if isinstance(framework, ModelFramework) else framework
+            )
         if status is not None:
-            params["status"] = status.value if isinstance(status, ModelStatus) else status
+            params["status"] = (
+                status.value if isinstance(status, ModelStatus) else status
+            )
         if hub_id is not None:
             params["hub_id"] = hub_id
         if labels:
@@ -165,9 +169,13 @@ class ModelsResource(BaseResource):
         if task is not None:
             params["task"] = task.value if isinstance(task, ModelTask) else task
         if framework is not None:
-            params["framework"] = framework.value if isinstance(framework, ModelFramework) else framework
+            params["framework"] = (
+                framework.value if isinstance(framework, ModelFramework) else framework
+            )
         if status is not None:
-            params["status"] = status.value if isinstance(status, ModelStatus) else status
+            params["status"] = (
+                status.value if isinstance(status, ModelStatus) else status
+            )
         if hub_id is not None:
             params["hub_id"] = hub_id
         if labels:

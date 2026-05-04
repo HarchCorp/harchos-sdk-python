@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import os
 import pathlib
-from typing import Any, Dict
 from unittest.mock import patch
 
 import pytest
@@ -13,8 +11,6 @@ import pytest
 from harchos.config import (
     HarchOSConfig,
     Profile,
-    _CONFIG_DIR,
-    _PROFILES_FILE,
 )
 
 
@@ -83,15 +79,15 @@ class TestHarchOSConfig:
         assert config.region == "france"
 
     def test_invalid_sovereignty(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             HarchOSConfig(sovereignty="invalid")  # type: ignore[call-arg]
 
     def test_negative_timeout(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             HarchOSConfig(timeout=-1.0)
 
     def test_max_retries_out_of_range(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             HarchOSConfig(max_retries=15)
 
 
@@ -122,8 +118,10 @@ class TestProfilePersistence:
         self, tmp_path: pathlib.Path, clean_env: None
     ) -> None:
         # Patch the config directory to use tmp_path
-        with patch("harchos.config._CONFIG_DIR", tmp_path), \
-             patch("harchos.config._PROFILES_FILE", tmp_path / "profiles.json"):
+        with (
+            patch("harchos.config._CONFIG_DIR", tmp_path),
+            patch("harchos.config._PROFILES_FILE", tmp_path / "profiles.json"),
+        ):
             config = HarchOSConfig(
                 api_key="hsk_testkey1234567890",
                 region="uae",
@@ -139,10 +137,12 @@ class TestProfilePersistence:
     def test_load_nonexistent_profile(
         self, tmp_path: pathlib.Path, clean_env: None
     ) -> None:
-        with patch("harchos.config._CONFIG_DIR", tmp_path), \
-             patch("harchos.config._PROFILES_FILE", tmp_path / "profiles.json"):
-            with pytest.raises(KeyError, match="not found"):
-                HarchOSConfig.from_profile("nonexistent")
+        with (
+            patch("harchos.config._CONFIG_DIR", tmp_path),
+            patch("harchos.config._PROFILES_FILE", tmp_path / "profiles.json"),
+            pytest.raises(KeyError, match="not found"),
+        ):
+            HarchOSConfig.from_profile("nonexistent")
 
     def test_save_empty_name_raises(self) -> None:
         config = HarchOSConfig()

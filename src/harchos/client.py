@@ -13,7 +13,6 @@ from ._retry import RetryConfig
 from ._streaming import async_stream_request
 from .auth import Authenticator
 from .config import HarchOSConfig
-from .errors import HarchOSError
 from .models.common import HealthStatus
 from .resources.energy import EnergyResource
 from .resources.hubs import HubsResource

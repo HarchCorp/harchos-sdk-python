@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import os
 from typing import Any, Dict, Generator
-from unittest.mock import MagicMock
 
 import pytest
 
+from harchos._http import HttpTransport
 from harchos.auth import Authenticator
 from harchos.config import HarchOSConfig
-from harchos._http import HttpTransport
-
 
 # ---------------------------------------------------------------------------
 # Configuration fixtures

@@ -8,7 +8,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from harchos import HarchOSClient
-from harchos.models.model import Model, ModelList, ModelSpec, ModelFramework, ModelTask, ModelStatus
+from harchos.models.model import (
+    Model,
+    ModelFramework,
+    ModelList,
+    ModelSpec,
+    ModelStatus,
+    ModelTask,
+)
 
 
 class TestModelsAsync:

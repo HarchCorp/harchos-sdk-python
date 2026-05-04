@@ -9,15 +9,15 @@ from __future__ import annotations
 import asyncio
 import random
 import time
-from typing import Any, Awaitable, Callable, Optional, Set, Type, Union
+from typing import Any, Awaitable, Callable, Optional, Set, Type
 
 from .errors import (
     HarchOSError,
     InternalServerError,
     RateLimitError,
     ServiceUnavailableError,
-    TimeoutError as HarchOSTimeoutError,
 )
+from .errors import TimeoutError as HarchOSTimeoutError
 
 # ---------------------------------------------------------------------------
 # Types
@@ -113,11 +113,7 @@ class RetryConfig:
             return True
 
         # Check by exception type
-        for exc_type in self.retryable_exceptions:
-            if isinstance(error, exc_type):
-                return True
-
-        return False
+        return any(isinstance(error, exc_type) for exc_type in self.retryable_exceptions)
 
 
 # ---------------------------------------------------------------------------

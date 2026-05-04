@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from ..models.workload import (
     Workload,
@@ -53,9 +53,14 @@ class WorkloadsResource(BaseResource):
         """
         params: Dict[str, Any] = {"page": page, "per_page": per_page}
         if status is not None:
-            params["status"] = status.value if isinstance(status, WorkloadStatus) else status
+            params["status"] = (
+                status.value if isinstance(status, WorkloadStatus) else status
+            )
         if workload_type is not None:
-            params["type"] = workload_type.value if isinstance(workload_type, WorkloadType) else workload_type
+            params["type"] = (
+                workload_type.value if isinstance(workload_type, WorkloadType)
+                else workload_type
+            )
         if hub_id is not None:
             params["hub_id"] = hub_id
         if labels:
@@ -168,9 +173,14 @@ class WorkloadsResource(BaseResource):
         """List workloads with optional filtering (sync)."""
         params: Dict[str, Any] = {"page": page, "per_page": per_page}
         if status is not None:
-            params["status"] = status.value if isinstance(status, WorkloadStatus) else status
+            params["status"] = (
+                status.value if isinstance(status, WorkloadStatus) else status
+            )
         if workload_type is not None:
-            params["type"] = workload_type.value if isinstance(workload_type, WorkloadType) else workload_type
+            params["type"] = (
+                workload_type.value if isinstance(workload_type, WorkloadType)
+                else workload_type
+            )
         if hub_id is not None:
             params["hub_id"] = hub_id
         if labels:
