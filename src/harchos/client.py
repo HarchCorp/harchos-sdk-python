@@ -15,9 +15,13 @@ from ._streaming import async_stream_request
 from .auth import Authenticator
 from .config import HarchOSConfig
 from .models.common import HealthStatus
+from .resources.carbon import CarbonResource
 from .resources.energy import EnergyResource
 from .resources.hubs import HubsResource
 from .resources.models import ModelsResource
+from .resources.monitoring import MonitoringResource
+from .resources.pricing import PricingResource
+from .resources.regions import RegionsResource
 from .resources.workloads import WorkloadsResource
 
 logger = get_logger("client")
@@ -119,6 +123,10 @@ class HarchOSClient:
         self._models = ModelsResource(self._transport)
         self._hubs = HubsResource(self._transport)
         self._energy = EnergyResource(self._transport)
+        self._carbon = CarbonResource(self._transport)
+        self._pricing = PricingResource(self._transport)
+        self._regions = RegionsResource(self._transport)
+        self._monitoring = MonitoringResource(self._transport)
 
         logger.debug(
             "HarchOSClient initialized: base_url=%s region=%s sovereignty=%s",
@@ -165,6 +173,26 @@ class HarchOSClient:
     def energy(self) -> EnergyResource:
         """Access the energy resource module."""
         return self._energy
+
+    @property
+    def carbon(self) -> CarbonResource:
+        """Access the carbon-aware scheduling resource module."""
+        return self._carbon
+
+    @property
+    def pricing(self) -> PricingResource:
+        """Access the pricing and billing resource module."""
+        return self._pricing
+
+    @property
+    def regions(self) -> RegionsResource:
+        """Access the regions resource module."""
+        return self._regions
+
+    @property
+    def monitoring(self) -> MonitoringResource:
+        """Access the monitoring resource module."""
+        return self._monitoring
 
     # ------------------------------------------------------------------
     # Health check

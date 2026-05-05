@@ -21,6 +21,19 @@ from .energy import (
     EnergySummary,
     GreenWindow,
 )
+from .carbon import (
+    CarbonAction,
+    CarbonDashboard,
+    CarbonDataSource,
+    CarbonForecast,
+    CarbonForecastPoint,
+    CarbonIntensityZone,
+    CarbonIntensityZoneList,
+    CarbonMetrics,
+    CarbonOptimalHub,
+    CarbonOptimizeResult,
+    FuelMixEntry,
+)
 from .hub import (
     Hub,
     HubCapacity,
@@ -38,6 +51,19 @@ from .model import (
     ModelSpec,
     ModelStatus,
     ModelTask,
+)
+from .monitoring import (
+    DetailedHealth,
+    PlatformMetrics,
+)
+from .pricing import (
+    BillingRecord,
+    CostBreakdown,
+    CostEstimate,
+    PricingPlan,
+)
+from .region import (
+    Region,
 )
 from .sovereignty import (
     CarbonBudget,
@@ -75,6 +101,18 @@ __all__ = [
     "EnergySource",
     "EnergySummary",
     "GreenWindow",
+    # Carbon
+    "CarbonAction",
+    "CarbonDashboard",
+    "CarbonDataSource",
+    "CarbonForecast",
+    "CarbonForecastPoint",
+    "CarbonIntensityZone",
+    "CarbonIntensityZoneList",
+    "CarbonMetrics",
+    "CarbonOptimalHub",
+    "CarbonOptimizeResult",
+    "FuelMixEntry",
     # Hub
     "Hub",
     "HubCapacity",
@@ -91,6 +129,16 @@ __all__ = [
     "ModelSpec",
     "ModelStatus",
     "ModelTask",
+    # Monitoring
+    "DetailedHealth",
+    "PlatformMetrics",
+    # Pricing
+    "BillingRecord",
+    "CostBreakdown",
+    "CostEstimate",
+    "PricingPlan",
+    # Region
+    "Region",
     # Sovereignty
     "CarbonBudget",
     "CarbonMetrics",
