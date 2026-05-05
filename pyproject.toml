@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "harchos"
-version = "0.2.0"
+version = "0.2.1"
 description = "Official Python SDK for HarchOS - The Operating System for Sovereign AI Infrastructure"
 readme = "README.md"
 license = "Apache-2.0"
@@ -12,7 +12,7 @@ requires-python = ">=3.9"
 authors = [
     { name = "VitalCheffe", email = "amineharchelkorane5@gmail.com" },
 ]
-keywords = ["harchos", "sovereign", "ai", "infrastructure", "sdk"]
+keywords = ["harchos", "sovereign", "ai", "infrastructure", "sdk", "carbon-aware", "gpu", "green-computing"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -24,6 +24,8 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Operating System",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Environment :: Console",
 ]
 dependencies = [
     "httpx>=0.25.0",
@@ -39,8 +41,20 @@ dev = [
     "respx>=0.20.0",
     "ruff>=0.1.0",
     "mypy>=1.5.0",
+    "build>=1.0.0",
+    "twine>=4.0.0",
 ]
 pandas = ["pandas>=2.0.0"]
+
+[project.scripts]
+harchos = "harchos.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/HarchCorp/harchos-sdk-python"
+Documentation = "https://docs.harchos.io"
+Repository = "https://github.com/HarchCorp/harchos-sdk-python"
+Issues = "https://github.com/HarchCorp/harchos-sdk-python/issues"
+Changelog = "https://github.com/HarchCorp/harchos-sdk-python/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/harchos"]
