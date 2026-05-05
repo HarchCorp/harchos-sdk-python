@@ -83,6 +83,10 @@ class CarbonIntensityZone(HarchOSBaseModel):
         """Whether this zone is currently below the green threshold (200 gCO2/kWh)."""
         return self.carbon_intensity_gco2_kwh <= 200.0
 
+    def __repr__(self) -> str:
+        green = "GREEN" if self.is_green else "FOSSIL"
+        return f"CarbonZone({self.zone} {self.zone_name!r} ci={self.carbon_intensity_gco2_kwh}gCO2/kWh renewable={self.renewable_percentage}% [{green}])"
+
 
 class CarbonIntensityZoneList(HarchOSBaseModel):
     """List of carbon intensity readings across multiple zones."""

@@ -29,8 +29,8 @@ logger = get_logger("http")
 # User-Agent
 # ---------------------------------------------------------------------------
 
-_USER_AGENT = "harchos-sdk-python/0.1.0"
-_SDK_VERSION = "0.1.0"
+_USER_AGENT = "harchos-sdk-python/0.2.0"
+_SDK_VERSION = "0.2.0"
 
 
 # ---------------------------------------------------------------------------

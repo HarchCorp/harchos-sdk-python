@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # Constants
 # ---------------------------------------------------------------------------
 
-_DEFAULT_BASE_URL = "https://api.harchos.io/v1"
+_DEFAULT_BASE_URL = "https://harchos-api-production.up.railway.app/v1"
 _DEFAULT_REGION = "morocco"
 _DEFAULT_SOVEREIGNTY = "strict"
 _DEFAULT_TIMEOUT = 30.0

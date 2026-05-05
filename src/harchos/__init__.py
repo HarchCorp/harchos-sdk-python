@@ -106,7 +106,7 @@ from .resources import (
     WorkloadsResource,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __author__ = "VitalCheffe"
 
 __all__ = [

@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field, field_validator, model_validator
 
-from .common import HarchOSBaseModel, ResourceMetadata
+from .common import HarchOSBaseModel, PaginationMeta, ResourceMetadata
 from .sovereignty import CarbonMetrics, DataResidencyPolicy, SovereigntyLevel
 
 # ---------------------------------------------------------------------------
@@ -150,12 +150,57 @@ class Hub(HarchOSBaseModel):
         """Check if the hub is ready to accept workloads."""
         return self.status == HubStatus.READY
 
+    def __repr__(self) -> str:
+        gpu_info = f" gpus={self.capacity.total_gpus}" if self.capacity else ""
+        ci_info = f" ci={self.carbon_metrics.region_grid_intensity}gCO2/kWh" if self.carbon_metrics else ""
+        return f"Hub({self.metadata.name!r} region={self.spec.region!r} tier={self.spec.tier!r}{gpu_info}{ci_info})"
+
 
 class HubList(HarchOSBaseModel):
     """A list of hubs with optional pagination info."""
 
     items: List[Hub] = Field(default_factory=list, description="Hub items")
     total: int = Field(default=0, ge=0, description="Total count")
+    pagination: Optional["PaginationMeta"] = Field(
+        default=None, description="Pagination metadata from API"
+    )
+
+    @model_validator(mode="after")
+    def _sync_total_from_pagination(self) -> "HubList":
+        """If total is 0 but pagination.total exists, use pagination.total."""
+        if self.total == 0 and self.pagination is not None:
+            object.__setattr__(self, "total", self.pagination.total)
+        return self
+
+    @property
+    def total_gpus(self) -> int:
+        """Sum of total_gpus across all hubs."""
+        return sum(h.capacity.total_gpus for h in self.items if h.capacity)
+
+    @property
+    def available_gpus(self) -> int:
+        """Sum of available_gpus across all hubs."""
+        return sum(h.capacity.available_gpus for h in self.items if h.capacity)
+
+    @property
+    def avg_carbon_intensity(self) -> float:
+        """Average carbon intensity across all hubs (gCO2/kWh)."""
+        intensities = [
+            h.carbon_metrics.region_grid_intensity
+            for h in self.items
+            if h.carbon_metrics and h.carbon_metrics.region_grid_intensity
+        ]
+        return sum(intensities) / len(intensities) if intensities else 0.0
+
+    @property
+    def avg_renewable_percentage(self) -> float:
+        """Average renewable percentage across all hubs."""
+        renewables = [
+            h.carbon_metrics.renewable_percentage
+            for h in self.items
+            if h.carbon_metrics and h.carbon_metrics.renewable_percentage
+        ]
+        return sum(renewables) / len(renewables) if renewables else 0.0
 
     def to_dataframe(self) -> Any:
         """Convert hub list to a pandas DataFrame.
@@ -173,3 +218,6 @@ class HubList(HarchOSBaseModel):
                 "Install it with: pip install harchos[pandas]"
             ) from None
         return pd.DataFrame([item.model_dump() for item in self.items])
+
+    def __repr__(self) -> str:
+        return f"HubList({len(self.items)} hubs, total_gpus={self.total_gpus}, avg_ci={self.avg_carbon_intensity:.0f}gCO2/kWh)"
