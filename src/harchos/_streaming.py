@@ -1,38 +1,31 @@
-"""HarchOS SDK streaming support with async generators.
+"""SSE streaming parser for HarchOS API.
 
-Provides Server-Sent Events (SSE) parsing and async generator wrappers
-for consuming streaming responses from the HarchOS API.
+Provides Server-Sent Events (SSE) parsing and sync/async streaming
+generators for consuming streaming responses from the HarchOS API.
 """
 
 from __future__ import annotations
 
-import contextlib
 import json as json_module
-from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, Optional, Type, TypeVar
+from dataclasses import dataclass, field
+from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Type, TypeVar
 
 import httpx
 
-from ._http import HttpTransport
-from ._logging import get_logger
-
-logger = get_logger("streaming")
+from ._exceptions import HarchOSError, make_error
 
 T = TypeVar("T")
 
-# ---------------------------------------------------------------------------
-# SSE Event
-# ---------------------------------------------------------------------------
 
 @dataclass
 class SSEEvent:
     """A single Server-Sent Event.
 
     Attributes:
-        event: The event type (from the ``event:`` field).
-        data: The event data (from the ``data:`` field).
-        id: Optional event ID (from the ``id:`` field).
-        retry: Optional retry interval in milliseconds (from the ``retry:`` field).
+        event: Event type (from ``event:`` field).
+        data: Event data (from ``data:`` field).
+        id: Optional event ID.
+        retry: Optional retry interval in ms.
     """
 
     event: str = "message"
@@ -42,23 +35,12 @@ class SSEEvent:
 
     @property
     def json(self) -> Any:
-        """Parse the data field as JSON.
-
-        Returns:
-            The parsed JSON object.
-
-        Raises:
-            ValueError: If the data is not valid JSON.
-        """
+        """Parse the data field as JSON."""
         return json_module.loads(self.data)
 
 
-# ---------------------------------------------------------------------------
-# SSE Parser
-# ---------------------------------------------------------------------------
-
 class SSEParser:
-    """Parse a stream of bytes into SSE events.
+    """Parse a stream of text into SSE events.
 
     Handles buffering of partial lines and multi-line ``data:`` fields
     per the SSE specification.
@@ -67,20 +49,11 @@ class SSEParser:
     def __init__(self) -> None:
         self._buffer: str = ""
         self._event: str = "message"
-        self._data_lines: list[str] = []
-        self._last_event_id: Optional[str] = None
-        self._retry: Optional[int] = None
+        self._data_lines: List[str] = []
 
-    def feed(self, chunk: str) -> list[SSEEvent]:
-        """Feed a chunk of text and return any complete events.
-
-        Args:
-            chunk: A text chunk from the response stream.
-
-        Returns:
-            A list of fully parsed :class:`SSEEvent` objects.
-        """
-        events: list[SSEEvent] = []
+    def feed(self, chunk: str) -> List[SSEEvent]:
+        """Feed a text chunk and return complete events."""
+        events: List[SSEEvent] = []
         self._buffer += chunk
 
         while "\n" in self._buffer:
@@ -91,19 +64,15 @@ class SSEParser:
                 # Empty line = dispatch event
                 if self._data_lines:
                     data = "\n".join(self._data_lines)
-                    event = SSEEvent(
+                    events.append(SSEEvent(
                         event=self._event,
                         data=data,
-                        id=self._last_event_id,
-                        retry=self._retry,
-                    )
-                    events.append(event)
+                    ))
                 self._event = "message"
                 self._data_lines = []
                 continue
 
             if line.startswith(":"):
-                # Comment – ignore
                 continue
 
             if ":" in line:
@@ -118,159 +87,173 @@ class SSEParser:
             elif field == "data":
                 self._data_lines.append(value)
             elif field == "id":
-                self._last_event_id = value
+                pass  # Could store last_event_id
             elif field == "retry":
-                with contextlib.suppress(ValueError):
-                    self._retry = int(value)
+                pass  # Could parse retry interval
 
         return events
 
-    def close(self) -> list[SSEEvent]:
-        """Flush any remaining buffered data as a final event.
-
-        Returns:
-            Any remaining events that were not yet dispatched.
-        """
-        events: list[SSEEvent] = []
-
-        # Process any remaining buffered content
-        if self._buffer.strip():
-            remaining = self._buffer.rstrip("\r\n")
-            if ":" in remaining:
-                field, _, value = remaining.partition(":")
-                value = value.lstrip(" ")
-            else:
-                field = remaining
-                value = ""
-
-            if field == "data":
-                self._data_lines.append(value)
-            elif field == "event":
-                self._event = value
-            elif field == "id":
-                self._last_event_id = value
-            elif field == "retry":
-                with contextlib.suppress(ValueError):
-                    self._retry = int(value)
-
-            self._buffer = ""
-
+    def flush(self) -> List[SSEEvent]:
+        """Flush any remaining buffered data as a final event."""
+        events: List[SSEEvent] = []
         if self._data_lines:
             data = "\n".join(self._data_lines)
-            event = SSEEvent(
-                event=self._event,
-                data=data,
-                id=self._last_event_id,
-                retry=self._retry,
-            )
-            events.append(event)
+            events.append(SSEEvent(event=self._event, data=data))
             self._data_lines = []
         return events
 
 
-# ---------------------------------------------------------------------------
-# Async streaming
-# ---------------------------------------------------------------------------
+def parse_sse_stream(text: str) -> Iterator[SSEEvent]:
+    """Parse a complete SSE text stream into events.
 
-async def stream_sse(
-    response: httpx.Response,
-) -> AsyncIterator[SSEEvent]:
-    """Yield SSE events from an httpx streaming response.
+    Args:
+        text: Complete SSE text (e.g. from a sync response).
+
+    Yields:
+        SSEEvent objects.
+    """
+    parser = SSEParser()
+    for event in parser.feed(text):
+        yield event
+    for event in parser.flush():
+        yield event
+
+
+async def async_parse_sse_stream(response: httpx.Response) -> AsyncIterator[SSEEvent]:
+    """Yield SSE events from an httpx async streaming response.
 
     Args:
         response: An httpx response opened in streaming mode.
 
     Yields:
-        :class:`SSEEvent` objects as they arrive.
+        SSEEvent objects as they arrive.
     """
     parser = SSEParser()
     async for chunk in response.aiter_text():
-        events = parser.feed(chunk)
-        for event in events:
+        for event in parser.feed(chunk):
             yield event
-    # Flush any remaining data
-    for event in parser.close():
+    for event in parser.flush():
         yield event
 
 
-async def stream_json(
-    response: httpx.Response,
-    *,
-    model_class: Optional[Type[T]] = None,
-) -> AsyncIterator[Any]:
-    """Yield parsed JSON objects from an SSE stream.
+def parse_stream_chunk(data: str, model_class: Optional[Type[T]] = None) -> Optional[Any]:
+    """Parse a single SSE data field into a typed object.
 
-    Automatically skips ``[DONE]`` sentinel events.
+    Skips ``[DONE]`` sentinel events and invalid JSON.
 
     Args:
-        response: An httpx streaming response.
-        model_class: Optional Pydantic model to validate each event.
+        data: The SSE ``data`` field content.
+        model_class: Optional Pydantic model to validate against.
 
-    Yields:
-        Parsed JSON objects or validated model instances.
+    Returns:
+        Parsed object, or None if the event should be skipped.
     """
-    async for event in stream_sse(response):
-        if event.data.strip() == "[DONE]":
-            return
+    if data.strip() == "[DONE]":
+        return None
 
-        try:
-            parsed = event.json
-        except (json_module.JSONDecodeError, ValueError):
-            continue
-
-        if model_class is not None:
-            yield model_class.model_validate(parsed)
-        else:
-            yield parsed
-
-
-# ---------------------------------------------------------------------------
-# Convenience streaming methods on HttpTransport
-# ---------------------------------------------------------------------------
-
-async def async_stream_request(
-    transport: HttpTransport,
-    method: str,
-    path: str,
-    *,
-    json: Optional[Dict[str, Any]] = None,
-    params: Optional[Dict[str, Any]] = None,
-    headers: Optional[Dict[str, str]] = None,
-    model_class: Optional[Type[T]] = None,
-) -> AsyncIterator[Any]:
-    """Open a streaming request and yield parsed events.
-
-    Args:
-        transport: The HTTP transport to use.
-        method: HTTP method.
-        path: URL path.
-        json: JSON body.
-        params: Query parameters.
-        headers: Additional headers.
-        model_class: Optional Pydantic model class for validation.
-
-    Yields:
-        Parsed streaming events (raw dicts or validated models).
-    """
-    client = await transport._get_async_client()
-    request_headers = transport._build_headers()
-    if headers:
-        request_headers.update(headers)
-    request_headers["Accept"] = "text/event-stream"
-
-    request = client.build_request(
-        method=method,
-        url=path,
-        json=json,
-        params=params,
-        headers=request_headers,
-    )
-
-    response = await client.send(request, stream=True)
-    logger.debug("Streaming connection opened: %s %s", method, path)
     try:
-        async for item in stream_json(response, model_class=model_class):
-            yield item
-    finally:
-        logger.debug("Streaming connection closed: %s %s", method, path)
-        await response.aclose()
+        parsed = json_module.loads(data)
+    except (json_module.JSONDecodeError, ValueError):
+        return None
+
+    if model_class is not None:
+        return model_class.model_validate(parsed)
+    return parsed
+
+
+# ---------------------------------------------------------------------------
+# Streaming response wrapper for sync iteration
+# ---------------------------------------------------------------------------
+
+class StreamIterator:
+    """Synchronous iterator over streaming SSE chunks.
+
+    Reads from an httpx streaming response and yields typed chunks.
+    """
+
+    def __init__(
+        self,
+        response: httpx.Response,
+        chunk_type: Optional[Type[T]] = None,
+    ) -> None:
+        self._response = response
+        self._chunk_type = chunk_type
+        self._parser = SSEParser()
+        self._buffer: List[Any] = []
+        self._done = False
+
+    def __iter__(self) -> "StreamIterator":
+        return self
+
+    def __next__(self) -> Any:
+        # Drain buffer first
+        if self._buffer:
+            return self._buffer.pop(0)
+
+        if self._done:
+            raise StopIteration
+
+        # Read next chunk from response
+        for raw_line in self._response.iter_lines():
+            line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else raw_line
+            events = self._parser.feed(line + "\n")
+            for event in events:
+                if event.data.strip() == "[DONE]":
+                    self._done = True
+                    # Flush remaining
+                    for remaining in self._parser.flush():
+                        chunk = parse_stream_chunk(remaining.data, self._chunk_type)
+                        if chunk is not None:
+                            self._buffer.append(chunk)
+                    if self._buffer:
+                        return self._buffer.pop(0)
+                    raise StopIteration
+                chunk = parse_stream_chunk(event.data, self._chunk_type)
+                if chunk is not None:
+                    return chunk
+
+        self._done = True
+        for remaining in self._parser.flush():
+            chunk = parse_stream_chunk(remaining.data, self._chunk_type)
+            if chunk is not None:
+                self._buffer.append(chunk)
+        if self._buffer:
+            return self._buffer.pop(0)
+        raise StopIteration
+
+
+class AsyncStreamIterator:
+    """Async iterator over streaming SSE chunks.
+
+    Reads from an httpx async streaming response and yields typed chunks.
+    """
+
+    def __init__(
+        self,
+        response: httpx.Response,
+        chunk_type: Optional[Type[T]] = None,
+    ) -> None:
+        self._response = response
+        self._chunk_type = chunk_type
+
+    def __aiter__(self) -> "AsyncStreamIterator":
+        return self
+
+    async def __anext__(self) -> Any:
+        parser = SSEParser()
+        async for chunk_text in self._response.aiter_text():
+            events = parser.feed(chunk_text)
+            for event in events:
+                if event.data.strip() == "[DONE]":
+                    raise StopAsyncIteration
+                parsed = parse_stream_chunk(event.data, self._chunk_type)
+                if parsed is not None:
+                    return parsed
+        # Flush
+        for event in parser.flush():
+            if event.data.strip() == "[DONE]":
+                raise StopAsyncIteration
+            parsed = parse_stream_chunk(event.data, self._chunk_type)
+            if parsed is not None:
+                return parsed
+        raise StopAsyncIteration

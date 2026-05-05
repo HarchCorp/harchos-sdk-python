@@ -1,21 +1,23 @@
 """HarchOS SDK resource modules package."""
 
-from .carbon import CarbonResource
-from .energy import EnergyResource
-from .hubs import HubsResource
-from .models import ModelsResource
-from .monitoring import MonitoringResource
-from .pricing import PricingResource
-from .regions import RegionsResource
-from .workloads import WorkloadsResource
+from .auth import AuthResource, AsyncAuthResource
+from .carbon import CarbonResource, AsyncCarbonResource
+from .hubs import HubsResource, AsyncHubsResource
+from .inference import InferenceResource, AsyncInferenceResource
+from .pricing import PricingResource, AsyncPricingResource
+from .workloads import WorkloadsResource, AsyncWorkloadsResource
 
 __all__ = [
+    "AuthResource",
+    "AsyncAuthResource",
     "CarbonResource",
-    "EnergyResource",
+    "AsyncCarbonResource",
     "HubsResource",
-    "ModelsResource",
-    "MonitoringResource",
+    "AsyncHubsResource",
+    "InferenceResource",
+    "AsyncInferenceResource",
     "PricingResource",
-    "RegionsResource",
+    "AsyncPricingResource",
     "WorkloadsResource",
+    "AsyncWorkloadsResource",
 ]

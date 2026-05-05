@@ -1,220 +1,104 @@
-"""Hubs resource module for the HarchOS SDK."""
+"""Hubs resource — List and inspect sovereign compute hubs.
+
+Provides ``harchos.hubs.list()`` and ``harchos.hubs.get(id)``.
+"""
 
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from ..models.hub import (
-    Hub,
-    HubCapacity,
-    HubList,
-    HubSpec,
-    HubStatus,
-    HubTier,
-)
-from .base import BaseResource
+from .._types import Hub, HubList
 
 
-class HubsResource(BaseResource):
-    """Manages HarchOS Hubs – sovereign compute clusters.
+class HubsResource:
+    """Synchronous hubs resource.
 
-    Provides both async and sync methods for hub CRUD, capacity
-    inspection, and scaling.
+    Accessed via ``client.hubs``.
     """
 
-    _resource_path = "/hubs"
-    _model_class = Hub
-
-    # ------------------------------------------------------------------
-    # Async methods
-    # ------------------------------------------------------------------
-
-    async def async_list(
-        self,
-        *,
-        status: Optional[HubStatus] = None,
-        tier: Optional[HubTier] = None,
-        region: Optional[str] = None,
-        labels: Optional[Dict[str, str]] = None,
-        page: int = 1,
-        per_page: int = 20,
-    ) -> HubList:
-        """List hubs with optional filtering (async).
-
-        Args:
-            status: Filter by hub status.
-            tier: Filter by tier.
-            region: Filter by region.
-            labels: Filter by labels.
-            page: Page number.
-            per_page: Items per page.
-
-        Returns:
-            A :class:`HubList` with matching hubs.
-        """
-        params: Dict[str, Any] = {"page": page, "per_page": per_page}
-        if status is not None:
-            params["status"] = status.value if isinstance(status, HubStatus) else status
-        if tier is not None:
-            params["tier"] = tier.value if isinstance(tier, HubTier) else tier
-        if region is not None:
-            params["region"] = region
-        if labels:
-            for key, value in labels.items():
-                params[f"label.{key}"] = value
-
-        data = await self._async_list(params=params)
-        return HubList.model_validate(data)
-
-    async def async_get(self, hub_id: str) -> Hub:
-        """Retrieve a hub by ID (async).
-
-        Args:
-            hub_id: The unique hub identifier.
-
-        Returns:
-            The requested :class:`Hub`.
-        """
-        data = await self._async_get(hub_id)
-        return Hub.model_validate(data)
-
-    async def async_create(self, spec: HubSpec) -> Hub:
-        """Create a new hub (async).
-
-        Args:
-            spec: The hub specification.
-
-        Returns:
-            The newly created :class:`Hub`.
-        """
-        data = await self._async_create(spec.model_dump(mode="json", exclude_none=True))
-        return Hub.model_validate(data)
-
-    async def async_update(self, hub_id: str, spec: HubSpec) -> Hub:
-        """Update an existing hub (async).
-
-        Args:
-            hub_id: The hub to update.
-            spec: The updated specification.
-
-        Returns:
-            The updated :class:`Hub`.
-        """
-        data = await self._async_update(
-            hub_id, spec.model_dump(mode="json", exclude_none=True)
-        )
-        return Hub.model_validate(data)
-
-    async def async_capacity(self, hub_id: str) -> HubCapacity:
-        """Get current capacity for a hub (async).
-
-        Args:
-            hub_id: The hub to inspect.
-
-        Returns:
-            Current :class:`HubCapacity`.
-        """
-        data = await self._async_get(hub_id, path=f"/hubs/{hub_id}/capacity")
-        return HubCapacity.model_validate(data)
-
-    async def async_scale(
-        self, hub_id: str, *, target_gpu_count: int
-    ) -> Hub:
-        """Scale a hub to a target GPU count (async).
-
-        Args:
-            hub_id: The hub to scale.
-            target_gpu_count: Desired number of GPUs.
-
-        Returns:
-            The scaling :class:`Hub`.
-        """
-        data = await self._async_patch(
-            hub_id, {"action": "scale", "target_gpu_count": target_gpu_count}
-        )
-        return Hub.model_validate(data)
-
-    async def async_drain(self, hub_id: str) -> Hub:
-        """Drain a hub (gracefully remove all workloads) (async).
-
-        Args:
-            hub_id: The hub to drain.
-
-        Returns:
-            The draining :class:`Hub`.
-        """
-        data = await self._async_patch(hub_id, {"action": "drain"})
-        return Hub.model_validate(data)
-
-    async def async_delete(self, hub_id: str) -> None:
-        """Delete a hub (async).
-
-        Args:
-            hub_id: The hub to delete.
-        """
-        await self._async_delete(hub_id)
-
-    # ------------------------------------------------------------------
-    # Sync methods
-    # ------------------------------------------------------------------
+    def __init__(self, client: Any) -> None:
+        self._client = client
 
     def list(
         self,
         *,
-        status: Optional[HubStatus] = None,
-        tier: Optional[HubTier] = None,
         region: Optional[str] = None,
-        labels: Optional[Dict[str, str]] = None,
+        status: Optional[str] = None,
+        tier: Optional[str] = None,
         page: int = 1,
-        per_page: int = 20,
+        per_page: int = 50,
     ) -> HubList:
-        """List hubs with optional filtering (sync)."""
+        """List sovereign compute hubs.
+
+        Args:
+            region: Filter by region.
+            status: Filter by status (``ready``, ``offline``, etc.).
+            tier: Filter by tier (``starter``, ``standard``, ``performance``, ``enterprise``).
+            page: Page number (1-indexed).
+            per_page: Items per page.
+
+        Returns:
+            A :class:`HubList` with hub items.
+        """
         params: Dict[str, Any] = {"page": page, "per_page": per_page}
-        if status is not None:
-            params["status"] = status.value if isinstance(status, HubStatus) else status
-        if tier is not None:
-            params["tier"] = tier.value if isinstance(tier, HubTier) else tier
         if region is not None:
             params["region"] = region
-        if labels:
-            for key, value in labels.items():
-                params[f"label.{key}"] = value
+        if status is not None:
+            params["status"] = status
+        if tier is not None:
+            params["tier"] = tier
 
-        data = self._sync_list(params=params)
-        return HubList.model_validate(data)
+        result = self._client.request("GET", "/hubs", params=params)
+        return HubList.model_validate(result)
 
     def get(self, hub_id: str) -> Hub:
-        """Retrieve a hub by ID (sync)."""
-        data = self._sync_get(hub_id)
-        return Hub.model_validate(data)
+        """Get a hub by ID.
 
-    def create(self, spec: HubSpec) -> Hub:
-        """Create a new hub (sync)."""
-        data = self._sync_create(spec.model_dump(mode="json", exclude_none=True))
-        return Hub.model_validate(data)
+        Args:
+            hub_id: The hub identifier.
 
-    def update(self, hub_id: str, spec: HubSpec) -> Hub:
-        """Update an existing hub (sync)."""
-        data = self._sync_update(hub_id, spec.model_dump(mode="json", exclude_none=True))
-        return Hub.model_validate(data)
+        Returns:
+            A :class:`Hub` object.
+        """
+        result = self._client.request("GET", f"/hubs/{hub_id}")
+        return Hub.model_validate(result)
 
-    def capacity(self, hub_id: str) -> HubCapacity:
-        """Get current capacity for a hub (sync)."""
-        data = self._sync_get(hub_id, path=f"/hubs/{hub_id}/capacity")
-        return HubCapacity.model_validate(data)
 
-    def scale(self, hub_id: str, *, target_gpu_count: int) -> Hub:
-        """Scale a hub (sync)."""
-        data = self._sync_patch(
-            hub_id, {"action": "scale", "target_gpu_count": target_gpu_count}
-        )
-        return Hub.model_validate(data)
+# ===========================================================================
+# Async variant
+# ===========================================================================
 
-    def drain(self, hub_id: str) -> Hub:
-        """Drain a hub (sync)."""
-        data = self._sync_patch(hub_id, {"action": "drain"})
-        return Hub.model_validate(data)
+class AsyncHubsResource:
+    """Asynchronous hubs resource.
 
-    def delete(self, hub_id: str) -> None:
-        """Delete a hub (sync)."""
-        self._sync_delete(hub_id)
+    Accessed via ``async_client.hubs``.
+    """
+
+    def __init__(self, client: Any) -> None:
+        self._client = client
+
+    async def list(
+        self,
+        *,
+        region: Optional[str] = None,
+        status: Optional[str] = None,
+        tier: Optional[str] = None,
+        page: int = 1,
+        per_page: int = 50,
+    ) -> HubList:
+        """List sovereign compute hubs (async)."""
+        params: Dict[str, Any] = {"page": page, "per_page": per_page}
+        if region is not None:
+            params["region"] = region
+        if status is not None:
+            params["status"] = status
+        if tier is not None:
+            params["tier"] = tier
+
+        result = await self._client.request("GET", "/hubs", params=params)
+        return HubList.model_validate(result)
+
+    async def get(self, hub_id: str) -> Hub:
+        """Get a hub by ID (async)."""
+        result = await self._client.request("GET", f"/hubs/{hub_id}")
+        return Hub.model_validate(result)

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "harchos"
-version = "0.2.1"
+version = "0.3.0"
 description = "Official Python SDK for HarchOS - The Operating System for Sovereign AI Infrastructure"
 readme = "README.md"
 license = "Apache-2.0"
@@ -34,6 +34,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+cli = [
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
@@ -43,15 +47,16 @@ dev = [
     "mypy>=1.5.0",
     "build>=1.0.0",
     "twine>=4.0.0",
+    "typer>=0.9.0",
 ]
 pandas = ["pandas>=2.0.0"]
 
 [project.scripts]
-harchos = "harchos.cli:main"
+harchos = "harchos.cli.main:main"
 
 [project.urls]
 Homepage = "https://github.com/HarchCorp/harchos-sdk-python"
-Documentation = "https://docs.harchos.io"
+Documentation = "https://docs.harchos.ai"
 Repository = "https://github.com/HarchCorp/harchos-sdk-python"
 Issues = "https://github.com/HarchCorp/harchos-sdk-python/issues"
 Changelog = "https://github.com/HarchCorp/harchos-sdk-python/blob/main/CHANGELOG.md"

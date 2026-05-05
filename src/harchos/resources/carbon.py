@@ -1,305 +1,116 @@
-"""Carbon-aware scheduling resource module for the HarchOS SDK.
+"""Carbon resource — Carbon intensity, optimization, and tracking.
 
-Provides both async and sync methods for carbon intensity queries,
-optimal hub selection, workload optimization, forecasting, and
-carbon metrics.
+Provides carbon-aware scheduling tools unique to HarchOS:
+- ``harchos.carbon.intensity(zone="MA")`` — Real-time carbon intensity
+- ``harchos.carbon.optimize(...)`` — Carbon-aware workload optimization
+- ``harchos.carbon.forecast(zone)`` — Carbon intensity forecast
+- ``harchos.carbon.dashboard()`` — Platform-wide carbon dashboard
+- ``harchos.carbon.optimal_hub(...)`` — Find the greenest hub
+- ``harchos.carbon.tracker`` — Context manager for tracking total CO2
 """
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+import threading
+from contextlib import contextmanager
+from typing import Any, Dict, Generator, List, Optional
 
-from ..models.carbon import (
+from .._types import (
     CarbonDashboard,
     CarbonForecast,
-    CarbonIntensityZone,
-    CarbonIntensityZoneList,
-    CarbonMetrics,
+    CarbonIntensity,
+    CarbonIntensityList,
     CarbonOptimalHub,
     CarbonOptimizeResult,
 )
-from .base import BaseResource
 
 
-class CarbonResource(BaseResource):
-    """Manages carbon-aware scheduling and carbon intensity data.
-
-    This is HarchOS's key differentiator: native carbon-aware GPU
-    orchestration.  Use this resource to:
-
-    * Query real-time carbon intensity by zone
-    * Find the greenest hub for a workload
-    * Optimize workload scheduling to minimize CO2 emissions
-    * Get carbon intensity forecasts
-    * Track carbon savings metrics
+class _CarbonTracker:
+    """Context manager to track total carbon across multiple requests.
 
     Usage::
 
-        client = HarchOSClient(api_key="hsk_...")
-
-        # Get carbon intensity for Morocco
-        ma = client.carbon.get_intensity("MA")
-        print(f"Morocco: {ma.carbon_intensity_gco2_kwh} gCO2/kWh")
-
-        # Find the greenest hub
-        optimal = client.carbon.optimal_hub(region="europe")
-        print(f"Best hub: {optimal.recommended_hub_name}")
-
-        # Optimize a workload
-        result = client.carbon.optimize(
-            workload_name="training-job",
-            gpu_count=4,
-            gpu_type="A100",
-            carbon_aware=True,
-            carbon_max_gco2=100,
-        )
-        print(f"Action: {result.action}, CO2 saved: {result.carbon_saved_kg} kg")
+        with harchos.carbon.tracker() as tracker:
+            result1 = harchos.inference.chat.completions.create(...)
+            result2 = harchos.inference.chat.completions.create(...)
+        print(f"Total CO2: {tracker.total_gco2}g")
     """
 
-    _resource_path = "/carbon"
+    def __init__(self) -> None:
+        self._total_gco2: float = 0.0
+        self._requests: int = 0
+        self._regions: List[str] = []
+        self._active: bool = False
 
-    # ------------------------------------------------------------------
-    # Async methods
-    # ------------------------------------------------------------------
+    @property
+    def total_gco2(self) -> float:
+        """Total grams of CO2 emitted across all tracked requests."""
+        return self._total_gco2
 
-    async def async_get_intensity(
-        self,
-        zone: str,
-    ) -> CarbonIntensityZone:
-        """Get real-time carbon intensity for an electricity zone (async).
+    @property
+    def request_count(self) -> int:
+        """Number of requests tracked."""
+        return self._requests
 
-        Args:
-            zone: Electricity Maps zone code (e.g. 'MA', 'FR', 'DE', 'GB').
+    @property
+    def regions(self) -> List[str]:
+        """List of hub regions used."""
+        return list(self._regions)
 
-        Returns:
-            A :class:`CarbonIntensityZone` with current carbon data.
-        """
-        data = await self._async_get(zone, path=f"/carbon/intensity/{zone}")
-        return CarbonIntensityZone.model_validate(data)
+    @property
+    def avg_gco2_per_request(self) -> float:
+        """Average CO2 per request."""
+        if self._requests == 0:
+            return 0.0
+        return self._total_gco2 / self._requests
 
-    async def async_list_intensities(
-        self,
-    ) -> CarbonIntensityZoneList:
-        """Get carbon intensity for all known zones (async).
-
-        Returns:
-            A :class:`CarbonIntensityZoneList` with data for all zones.
-        """
-        response = await self._transport.async_get("/carbon/intensity")
-        return CarbonIntensityZoneList.model_validate(response.json())
-
-    async def async_optimal_hub(
-        self,
-        *,
-        region: Optional[str] = None,
-        gpu_count: Optional[int] = None,
-        gpu_type: Optional[str] = None,
-        carbon_max_gco2: Optional[float] = None,
-        priority: Optional[str] = None,
-        defer_ok: bool = True,
-    ) -> CarbonOptimalHub:
-        """Find the carbon-optimal hub for a workload (async).
+    def record(self, gco2: float, region: str = "unknown") -> None:
+        """Record carbon data from a request.
 
         Args:
-            region: Target region filter.
-            gpu_count: Minimum number of GPUs required.
-            gpu_type: GPU type required.
-            carbon_max_gco2: Maximum acceptable carbon intensity in gCO2/kWh.
-            priority: Workload priority (low/normal/high/critical).
-            defer_ok: Whether deferral is acceptable.
-
-        Returns:
-            A :class:`CarbonOptimalHub` with the recommendation.
+            gco2: Grams of CO2 emitted.
+            region: Hub region.
         """
-        payload: Dict[str, Any] = {"defer_ok": defer_ok}
-        if region is not None:
-            payload["region"] = region
-        if gpu_count is not None:
-            payload["gpu_count"] = gpu_count
-        if gpu_type is not None:
-            payload["gpu_type"] = gpu_type
-        if carbon_max_gco2 is not None:
-            payload["carbon_max_gco2"] = carbon_max_gco2
-        if priority is not None:
-            payload["priority"] = priority
+        self._total_gco2 += gco2
+        self._requests += 1
+        if region not in self._regions:
+            self._regions.append(region)
 
-        data = await self._async_create(payload, path="/carbon/optimal-hub")
-        return CarbonOptimalHub.model_validate(data)
+    def __enter__(self) -> "_CarbonTracker":
+        self._active = True
+        return self
 
-    async def async_optimize(
-        self,
-        *,
-        workload_name: str,
-        workload_type: str = "training",
-        gpu_count: int = 1,
-        gpu_type: Optional[str] = None,
-        cpu_cores: int = 4,
-        memory_gb: float = 16.0,
-        priority: str = "normal",
-        carbon_aware: bool = True,
-        carbon_max_gco2: Optional[float] = None,
-        region: Optional[str] = None,
-        estimated_duration_hours: float = 1.0,
-    ) -> CarbonOptimizeResult:
-        """Optimize a workload's scheduling based on carbon intensity (async).
+    def __exit__(self, *args: Any) -> None:
+        self._active = False
 
-        This is the primary method for carbon-aware scheduling.  It
-        ranks hubs by carbon intensity, selects the greenest hub, and
-        decides whether to schedule now, defer, or reject.
-
-        Args:
-            workload_name: Name of the workload.
-            workload_type: Type (training/inference/fine_tuning/etc.).
-            gpu_count: Number of GPUs needed.
-            gpu_type: GPU type required.
-            cpu_cores: CPU cores needed.
-            memory_gb: Memory in GB needed.
-            priority: Workload priority.
-            carbon_aware: Enable carbon-aware scheduling.
-            carbon_max_gco2: Maximum carbon intensity threshold.
-            region: Preferred region.
-            estimated_duration_hours: Estimated workload duration.
-
-        Returns:
-            A :class:`CarbonOptimizeResult` with the scheduling decision.
-        """
-        payload: Dict[str, Any] = {
-            "workload_name": workload_name,
-            "workload_type": workload_type,
-            "gpu_count": gpu_count,
-            "cpu_cores": cpu_cores,
-            "memory_gb": memory_gb,
-            "priority": priority,
-            "carbon_aware": carbon_aware,
-            "estimated_duration_hours": estimated_duration_hours,
-        }
-        if gpu_type is not None:
-            payload["gpu_type"] = gpu_type
-        if carbon_max_gco2 is not None:
-            payload["carbon_max_gco2"] = carbon_max_gco2
-        if region is not None:
-            payload["region"] = region
-
-        data = await self._async_create(payload, path="/carbon/optimize")
-        return CarbonOptimizeResult.model_validate(data)
-
-    async def async_get_forecast(
-        self,
-        zone: str,
-        *,
-        hours: int = 24,
-    ) -> CarbonForecast:
-        """Get a carbon intensity forecast for a zone (async).
-
-        Args:
-            zone: Electricity Maps zone code.
-            hours: Forecast horizon (1-72 hours).
-
-        Returns:
-            A :class:`CarbonForecast` with forecast points and green windows.
-        """
-        response = await self._transport.async_get(
-            f"/carbon/forecast/{zone}", params={"hours": hours}
+    def __repr__(self) -> str:
+        return (
+            f"CarbonTracker(requests={self._requests}, "
+            f"total_gco2={self._total_gco2:.2f})"
         )
-        return CarbonForecast.model_validate(response.json())
 
-    async def async_get_metrics(
-        self,
-        *,
-        period_days: int = 30,
-    ) -> CarbonMetrics:
-        """Get aggregate carbon metrics for the platform (async).
 
-        Args:
-            period_days: Metrics period in days (1-365).
+class CarbonResource:
+    """Synchronous carbon resource.
 
-        Returns:
-            A :class:`CarbonMetrics` with savings and hub data.
-        """
-        response = await self._transport.async_get(
-            "/carbon/metrics", params={"period_days": period_days}
-        )
-        return CarbonMetrics.model_validate(response.json())
+    Accessed via ``client.carbon``.
+    """
 
-    async def async_get_dashboard(
-        self,
-    ) -> CarbonDashboard:
-        """Get full carbon-aware dashboard data (async).
+    def __init__(self, client: Any) -> None:
+        self._client = client
+        self._tracker: Optional[_CarbonTracker] = None
 
-        Returns:
-            A :class:`CarbonDashboard` with metrics, intensities, and logs.
-        """
-        response = await self._transport.async_get("/carbon/dashboard")
-        return CarbonDashboard.model_validate(response.json())
-
-    # ------------------------------------------------------------------
-    # Sync methods
-    # ------------------------------------------------------------------
-
-    def get_intensity(
-        self,
-        zone: str,
-    ) -> CarbonIntensityZone:
-        """Get real-time carbon intensity for an electricity zone (sync).
+    def intensity(self, zone: str) -> CarbonIntensity:
+        """Get real-time carbon intensity for a zone.
 
         Args:
-            zone: Electricity Maps zone code (e.g. 'MA', 'FR', 'DE', 'GB').
+            zone: Zone code (e.g. ``"MA"`` for Morocco, ``"FR"`` for France).
 
         Returns:
-            A :class:`CarbonIntensityZone` with current carbon data.
+            A :class:`CarbonIntensity` object.
         """
-        data = self._sync_get(zone, path=f"/carbon/intensity/{zone}")
-        return CarbonIntensityZone.model_validate(data)
-
-    def list_intensities(
-        self,
-    ) -> CarbonIntensityZoneList:
-        """Get carbon intensity for all known zones (sync).
-
-        Returns:
-            A :class:`CarbonIntensityZoneList` with data for all zones.
-        """
-        response = self._transport.sync_get("/carbon/intensity")
-        return CarbonIntensityZoneList.model_validate(response.json())
-
-    def optimal_hub(
-        self,
-        *,
-        region: Optional[str] = None,
-        gpu_count: Optional[int] = None,
-        gpu_type: Optional[str] = None,
-        carbon_max_gco2: Optional[float] = None,
-        priority: Optional[str] = None,
-        defer_ok: bool = True,
-    ) -> CarbonOptimalHub:
-        """Find the carbon-optimal hub for a workload (sync).
-
-        Args:
-            region: Target region filter.
-            gpu_count: Minimum number of GPUs required.
-            gpu_type: GPU type required.
-            carbon_max_gco2: Maximum acceptable carbon intensity.
-            priority: Workload priority.
-            defer_ok: Whether deferral is acceptable.
-
-        Returns:
-            A :class:`CarbonOptimalHub` with the recommendation.
-        """
-        payload: Dict[str, Any] = {"defer_ok": defer_ok}
-        if region is not None:
-            payload["region"] = region
-        if gpu_count is not None:
-            payload["gpu_count"] = gpu_count
-        if gpu_type is not None:
-            payload["gpu_type"] = gpu_type
-        if carbon_max_gco2 is not None:
-            payload["carbon_max_gco2"] = carbon_max_gco2
-        if priority is not None:
-            payload["priority"] = priority
-
-        data = self._sync_create(payload, path="/carbon/optimal-hub")
-        return CarbonOptimalHub.model_validate(data)
+        result = self._client.request("GET", "/carbon/intensity", params={"zone": zone})
+        return CarbonIntensity.model_validate(result)
 
     def optimize(
         self,
@@ -308,97 +119,275 @@ class CarbonResource(BaseResource):
         workload_type: str = "training",
         gpu_count: int = 1,
         gpu_type: Optional[str] = None,
-        cpu_cores: int = 4,
-        memory_gb: float = 16.0,
-        priority: str = "normal",
         carbon_aware: bool = True,
         carbon_max_gco2: Optional[float] = None,
         region: Optional[str] = None,
         estimated_duration_hours: float = 1.0,
     ) -> CarbonOptimizeResult:
-        """Optimize a workload's scheduling based on carbon intensity (sync).
+        """Run carbon-aware workload optimization.
 
         Args:
-            workload_name: Name of the workload.
-            workload_type: Type (training/inference/fine_tuning/etc.).
-            gpu_count: Number of GPUs needed.
-            gpu_type: GPU type required.
-            cpu_cores: CPU cores needed.
-            memory_gb: Memory in GB needed.
-            priority: Workload priority.
+            workload_name: Name of the workload to optimize.
+            workload_type: Workload type (``training``, ``inference``, etc.).
+            gpu_count: Number of GPUs required.
+            gpu_type: GPU type (e.g. ``"a100"``).
             carbon_aware: Enable carbon-aware scheduling.
-            carbon_max_gco2: Maximum carbon intensity threshold.
+            carbon_max_gco2: Maximum carbon intensity threshold in gCO2/kWh.
             region: Preferred region.
-            estimated_duration_hours: Estimated workload duration.
+            estimated_duration_hours: Estimated duration in hours.
 
         Returns:
-            A :class:`CarbonOptimizeResult` with the scheduling decision.
+            A :class:`CarbonOptimizeResult` with the optimization recommendation.
         """
-        payload: Dict[str, Any] = {
+        body: Dict[str, Any] = {
             "workload_name": workload_name,
             "workload_type": workload_type,
             "gpu_count": gpu_count,
-            "cpu_cores": cpu_cores,
-            "memory_gb": memory_gb,
-            "priority": priority,
             "carbon_aware": carbon_aware,
             "estimated_duration_hours": estimated_duration_hours,
         }
         if gpu_type is not None:
-            payload["gpu_type"] = gpu_type
+            body["gpu_type"] = gpu_type
         if carbon_max_gco2 is not None:
-            payload["carbon_max_gco2"] = carbon_max_gco2
+            body["carbon_max_gco2"] = carbon_max_gco2
         if region is not None:
-            payload["region"] = region
+            body["region"] = region
 
-        data = self._sync_create(payload, path="/carbon/optimize")
-        return CarbonOptimizeResult.model_validate(data)
+        result = self._client.request("POST", "/carbon/optimize", json=body)
+        return CarbonOptimizeResult.model_validate(result)
 
-    def get_forecast(
-        self,
-        zone: str,
-        *,
-        hours: int = 24,
-    ) -> CarbonForecast:
-        """Get a carbon intensity forecast for a zone (sync).
+    def forecast(self, zone: str) -> CarbonForecast:
+        """Get carbon intensity forecast for a zone.
 
         Args:
-            zone: Electricity Maps zone code.
-            hours: Forecast horizon (1-72 hours).
+            zone: Zone code (e.g. ``"MA"``).
 
         Returns:
-            A :class:`CarbonForecast` with forecast points and green windows.
+            A :class:`CarbonForecast` with forecast data points and green windows.
         """
-        response = self._transport.sync_get(
-            f"/carbon/forecast/{zone}", params={"hours": hours}
-        )
-        return CarbonForecast.model_validate(response.json())
+        result = self._client.request("GET", "/carbon/forecast", params={"zone": zone})
+        return CarbonForecast.model_validate(result)
 
-    def get_metrics(
+    def dashboard(self) -> CarbonDashboard:
+        """Get the platform-wide carbon dashboard.
+
+        Returns:
+            A :class:`CarbonDashboard` with aggregate carbon metrics.
+        """
+        result = self._client.request("GET", "/carbon/dashboard")
+        return CarbonDashboard.model_validate(result)
+
+    def optimal_hub(
         self,
         *,
-        period_days: int = 30,
-    ) -> CarbonMetrics:
-        """Get aggregate carbon metrics for the platform (sync).
+        gpu_count: int = 1,
+        gpu_type: Optional[str] = None,
+        region: Optional[str] = None,
+        carbon_max_gco2: Optional[float] = None,
+    ) -> CarbonOptimalHub:
+        """Find the greenest hub for a workload.
 
         Args:
-            period_days: Metrics period in days (1-365).
+            gpu_count: Number of GPUs required.
+            gpu_type: GPU type (e.g. ``"a100"``).
+            region: Preferred region.
+            carbon_max_gco2: Maximum carbon intensity threshold.
 
         Returns:
-            A :class:`CarbonMetrics` with savings and hub data.
+            A :class:`CarbonOptimalHub` with the recommended hub.
         """
-        response = self._transport.sync_get(
-            "/carbon/metrics", params={"period_days": period_days}
+        params: Dict[str, Any] = {"gpu_count": gpu_count}
+        if gpu_type is not None:
+            params["gpu_type"] = gpu_type
+        if region is not None:
+            params["region"] = region
+        if carbon_max_gco2 is not None:
+            params["carbon_max_gco2"] = carbon_max_gco2
+
+        result = self._client.request("GET", "/carbon/optimal-hub", params=params)
+        return CarbonOptimalHub.model_validate(result)
+
+    @contextmanager
+    def tracker(self) -> Generator[_CarbonTracker, None, None]:
+        """Context manager to track total carbon across multiple requests.
+
+        Example::
+
+            with harchos.carbon.tracker() as tracker:
+                result1 = harchos.inference.chat.completions.create(...)
+                result2 = harchos.inference.chat.completions.create(...)
+                # Auto-track carbon from inference responses
+                for resp in [result1, result2]:
+                    if hasattr(resp, 'carbon_footprint'):
+                        tracker.record(
+                            gco2=resp.carbon_footprint.gco2,
+                            region=resp.carbon_footprint.hub_region,
+                        )
+            print(f"Total CO2: {tracker.total_gco2}g")
+
+        Yields:
+            A :class:`_CarbonTracker` instance.
+        """
+        t = _CarbonTracker()
+        self._tracker = t
+        try:
+            yield t
+        finally:
+            self._tracker = None
+
+
+# ===========================================================================
+# Async variant
+# ===========================================================================
+
+class _AsyncCarbonTracker:
+    """Async context manager for tracking total carbon across requests.
+
+    Usage::
+
+        async with harchos.carbon.tracker() as tracker:
+            result = await harchos.inference.chat.completions.create(...)
+            if hasattr(result, 'carbon_footprint'):
+                tracker.record(
+                    gco2=result.carbon_footprint.gco2,
+                    region=result.carbon_footprint.hub_region,
+                )
+        print(f"Total CO2: {tracker.total_gco2}g")
+    """
+
+    def __init__(self) -> None:
+        self._total_gco2: float = 0.0
+        self._requests: int = 0
+        self._regions: List[str] = []
+        self._active: bool = False
+
+    @property
+    def total_gco2(self) -> float:
+        return self._total_gco2
+
+    @property
+    def request_count(self) -> int:
+        return self._requests
+
+    @property
+    def regions(self) -> List[str]:
+        return list(self._regions)
+
+    @property
+    def avg_gco2_per_request(self) -> float:
+        if self._requests == 0:
+            return 0.0
+        return self._total_gco2 / self._requests
+
+    def record(self, gco2: float, region: str = "unknown") -> None:
+        self._total_gco2 += gco2
+        self._requests += 1
+        if region not in self._regions:
+            self._regions.append(region)
+
+    async def __aenter__(self) -> "_AsyncCarbonTracker":
+        self._active = True
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        self._active = False
+
+    def __repr__(self) -> str:
+        return (
+            f"AsyncCarbonTracker(requests={self._requests}, "
+            f"total_gco2={self._total_gco2:.2f})"
         )
-        return CarbonMetrics.model_validate(response.json())
 
-    def get_dashboard(
+
+class AsyncCarbonResource:
+    """Asynchronous carbon resource.
+
+    Accessed via ``async_client.carbon``.
+    """
+
+    def __init__(self, client: Any) -> None:
+        self._client = client
+
+    async def intensity(self, zone: str) -> CarbonIntensity:
+        """Get real-time carbon intensity for a zone (async)."""
+        result = await self._client.request("GET", "/carbon/intensity", params={"zone": zone})
+        return CarbonIntensity.model_validate(result)
+
+    async def optimize(
         self,
-    ) -> CarbonDashboard:
-        """Get full carbon-aware dashboard data (sync).
+        *,
+        workload_name: str,
+        workload_type: str = "training",
+        gpu_count: int = 1,
+        gpu_type: Optional[str] = None,
+        carbon_aware: bool = True,
+        carbon_max_gco2: Optional[float] = None,
+        region: Optional[str] = None,
+        estimated_duration_hours: float = 1.0,
+    ) -> CarbonOptimizeResult:
+        """Run carbon-aware workload optimization (async)."""
+        body: Dict[str, Any] = {
+            "workload_name": workload_name,
+            "workload_type": workload_type,
+            "gpu_count": gpu_count,
+            "carbon_aware": carbon_aware,
+            "estimated_duration_hours": estimated_duration_hours,
+        }
+        if gpu_type is not None:
+            body["gpu_type"] = gpu_type
+        if carbon_max_gco2 is not None:
+            body["carbon_max_gco2"] = carbon_max_gco2
+        if region is not None:
+            body["region"] = region
 
-        Returns:
-            A :class:`CarbonDashboard` with metrics, intensities, and logs.
+        result = await self._client.request("POST", "/carbon/optimize", json=body)
+        return CarbonOptimizeResult.model_validate(result)
+
+    async def forecast(self, zone: str) -> CarbonForecast:
+        """Get carbon intensity forecast for a zone (async)."""
+        result = await self._client.request("GET", "/carbon/forecast", params={"zone": zone})
+        return CarbonForecast.model_validate(result)
+
+    async def dashboard(self) -> CarbonDashboard:
+        """Get the platform-wide carbon dashboard (async)."""
+        result = await self._client.request("GET", "/carbon/dashboard")
+        return CarbonDashboard.model_validate(result)
+
+    async def optimal_hub(
+        self,
+        *,
+        gpu_count: int = 1,
+        gpu_type: Optional[str] = None,
+        region: Optional[str] = None,
+        carbon_max_gco2: Optional[float] = None,
+    ) -> CarbonOptimalHub:
+        """Find the greenest hub for a workload (async)."""
+        params: Dict[str, Any] = {"gpu_count": gpu_count}
+        if gpu_type is not None:
+            params["gpu_type"] = gpu_type
+        if region is not None:
+            params["region"] = region
+        if carbon_max_gco2 is not None:
+            params["carbon_max_gco2"] = carbon_max_gco2
+
+        result = await self._client.request("GET", "/carbon/optimal-hub", params=params)
+        return CarbonOptimalHub.model_validate(result)
+
+    @contextmanager
+    def tracker(self) -> Generator[_AsyncCarbonTracker, None, None]:
+        """Context manager to track total carbon across async requests.
+
+        Usage::
+
+            async with async_client.carbon.tracker() as tracker:
+                result = await async_client.inference.chat.completions.create(...)
+                tracker.record(gco2=result.carbon_footprint.gco2)
+
+        Yields:
+            An :class:`_AsyncCarbonTracker` instance.
         """
-        response = self._transport.sync_get("/carbon/dashboard")
-        return CarbonDashboard.model_validate(response.json())
+        t = _AsyncCarbonTracker()
+        try:
+            yield t
+        finally:
+            pass

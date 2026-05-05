@@ -1,203 +1,140 @@
-"""HarchOS SDK - The Official Python SDK for HarchOS.
+"""HarchOS Python SDK v0.3.0 — The Operating System for Sovereign AI Infrastructure.
 
-HarchOS is the Operating System for Sovereign AI Infrastructure.
 This SDK provides both sync and async access to the HarchOS API
-with sovereign defaults: region="morocco", sovereignty="strict",
-carbon_aware=True.
+with built-in carbon tracking, OpenAI-compatible inference, and
+carbon-aware workload scheduling.
 
-Example::
+Example (sync)::
 
-    from harchos import HarchOSClient
+    from harchos import HarchOS
 
-    client = HarchOSClient(api_key="hsk_...")
-    with client:
-        workloads = client.workloads.list()
+    client = HarchOS(api_key="hsk_...")
+    response = client.inference.chat.completions.create(
+        model="harchos-llama-3.3-70b",
+        messages=[{"role": "user", "content": "Hello"}],
+    )
+    print(response.content)
+    print(f"Carbon: {response.carbon_footprint.gco2}g CO2")
 
-    # Or async
-    async with HarchOSClient(api_key="hsk_...") as client:
-        workloads = await client.workloads.async_list()
+Example (async)::
+
+    from harchos import AsyncHarchOS
+
+    async with AsyncHarchOS(api_key="hsk_...") as client:
+        response = await client.inference.chat.completions.create(
+            model="harchos-llama-3.3-70b",
+            messages=[{"role": "user", "content": "Hello"}],
+        )
+
+Example (streaming)::
+
+    for chunk in client.inference.chat.completions.create(
+        model="harchos-llama-3.3-70b",
+        messages=[{"role": "user", "content": "Hello"}],
+        stream=True,
+    ):
+        print(chunk.choices[0].delta.content, end="")
+
+Example (carbon tracker)::
+
+    with client.carbon.tracker() as tracker:
+        r1 = client.inference.chat.completions.create(...)
+        r2 = client.inference.chat.completions.create(...)
+        for r in [r1, r2]:
+            tracker.record(gco2=r.carbon_footprint.gco2, region=r.carbon_footprint.hub_region)
+    print(f"Total CO2: {tracker.total_gco2}g")
 """
 
-from ._logging import configure_logging, get_logger
-from .auth import Authenticator
-from .client import HarchOSClient
-from .config import HarchOSConfig, Profile
-from .errors import (
-    APIKeyExpiredError,
+from ._client import AsyncHarchOS, HarchOS, __version__
+from ._config import Config
+from ._exceptions import (
     AuthenticationError,
-    BadRequestError,
-    CarbonBudgetExceededError,
-    ConflictError,
-    ConnectionError,
-    DataResidencyError,
-    ForbiddenError,
     HarchOSError,
-    InternalServerError,
-    InvalidAPIKeyError,
+    InferenceError,
     NotFoundError,
-    PermissionDeniedError,
     RateLimitError,
-    ServiceUnavailableError,
-    SovereigntyError,
-    TimeoutError,
-    UnauthorizedError,
     ValidationError,
 )
-from .models import (
-    BillingRecord,
-    CarbonAction,
-    CarbonBudget,
+from ._types import (
+    APIKeyInfo,
     CarbonDashboard,
-    CarbonDataSource,
-    CarbonMetrics,
+    CarbonFootprint,
     CarbonForecast,
     CarbonForecastPoint,
-    CarbonIntensityZone,
-    CarbonIntensityZoneList,
+    CarbonIntensity,
     CarbonOptimalHub,
     CarbonOptimizeResult,
-    ComputePriority,
-    ComputeRequirements,
+    ChatChoice,
+    ChatCompletionChunk,
+    ChatCompletionResponse,
+    ChatMessage,
+    CompletionChunk,
+    CompletionChoice,
+    CompletionResponse,
     CostBreakdown,
     CostEstimate,
-    DataClassification,
-    DataResidencyPolicy,
-    DetailedHealth,
-    EnergyConsumption,
-    EnergyEfficiency,
-    EnergyReport,
-    EnergySource,
-    EnergySummary,
-    FuelMixEntry,
-    GreenWindow,
     Hub,
     HubCapacity,
     HubList,
-    HubSpec,
-    HubStatus,
-    HubTier,
-    Model,
-    ModelCapabilities,
-    ModelFramework,
+    ModelInfo,
     ModelList,
-    ModelSize,
-    ModelSpec,
-    ModelStatus,
-    ModelTask,
-    PlatformMetrics,
     PricingPlan,
-    Region,
-    SovereigntyLevel,
-    SovereigntyReport,
+    UserInfo,
+    Usage,
     Workload,
     WorkloadList,
     WorkloadSpec,
-    WorkloadStatus,
-    WorkloadType,
-)
-from .resources import (
-    CarbonResource,
-    EnergyResource,
-    HubsResource,
-    ModelsResource,
-    MonitoringResource,
-    PricingResource,
-    RegionsResource,
-    WorkloadsResource,
 )
 
-__version__ = "0.2.1"
 __author__ = "VitalCheffe"
 
 __all__ = [
     # Client
-    "HarchOSClient",
-    # Auth
-    "Authenticator",
+    "HarchOS",
+    "AsyncHarchOS",
     # Config
-    "HarchOSConfig",
-    "Profile",
-    # Logging
-    "configure_logging",
-    "get_logger",
-    # Errors
-    "APIKeyExpiredError",
-    "AuthenticationError",
-    "BadRequestError",
-    "CarbonBudgetExceededError",
-    "ConflictError",
-    "ConnectionError",
-    "DataResidencyError",
-    "ForbiddenError",
+    "Config",
+    # Version
+    "__version__",
+    # Exceptions
     "HarchOSError",
-    "InternalServerError",
-    "InvalidAPIKeyError",
-    "NotFoundError",
-    "PermissionDeniedError",
+    "AuthenticationError",
     "RateLimitError",
-    "ServiceUnavailableError",
-    "SovereigntyError",
-    "TimeoutError",
-    "UnauthorizedError",
+    "NotFoundError",
     "ValidationError",
-    # Models
-    "BillingRecord",
-    "CarbonAction",
-    "CarbonBudget",
-    "CarbonDashboard",
-    "CarbonDataSource",
+    "InferenceError",
+    # Types — Carbon
+    "CarbonFootprint",
+    "CarbonIntensity",
     "CarbonForecast",
     "CarbonForecastPoint",
-    "CarbonIntensityZone",
-    "CarbonIntensityZoneList",
-    "CarbonMetrics",
     "CarbonOptimalHub",
     "CarbonOptimizeResult",
-    "ComputePriority",
-    "ComputeRequirements",
-    "CostBreakdown",
-    "CostEstimate",
-    "DataClassification",
-    "DataResidencyPolicy",
-    "DetailedHealth",
-    "EnergyConsumption",
-    "EnergyEfficiency",
-    "EnergyReport",
-    "EnergySource",
-    "EnergySummary",
-    "FuelMixEntry",
-    "GreenWindow",
-    "Hub",
-    "HubCapacity",
-    "HubList",
-    "HubSpec",
-    "HubStatus",
-    "HubTier",
-    "Model",
-    "ModelCapabilities",
-    "ModelFramework",
+    "CarbonDashboard",
+    # Types — Inference
+    "ModelInfo",
     "ModelList",
-    "ModelSize",
-    "ModelSpec",
-    "ModelStatus",
-    "ModelTask",
-    "PlatformMetrics",
-    "PricingPlan",
-    "Region",
-    "SovereigntyLevel",
-    "SovereigntyReport",
+    "ChatMessage",
+    "ChatChoice",
+    "ChatCompletionResponse",
+    "ChatCompletionChunk",
+    "CompletionChoice",
+    "CompletionResponse",
+    "CompletionChunk",
+    "Usage",
+    # Types — Workloads
     "Workload",
     "WorkloadList",
     "WorkloadSpec",
-    "WorkloadStatus",
-    "WorkloadType",
-    # Resources
-    "CarbonResource",
-    "EnergyResource",
-    "HubsResource",
-    "ModelsResource",
-    "MonitoringResource",
-    "PricingResource",
-    "RegionsResource",
-    "WorkloadsResource",
+    # Types — Hubs
+    "Hub",
+    "HubCapacity",
+    "HubList",
+    # Types — Pricing
+    "PricingPlan",
+    "CostEstimate",
+    "CostBreakdown",
+    # Types — Auth
+    "UserInfo",
+    "APIKeyInfo",
 ]
