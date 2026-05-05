@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from typing import Any, Dict, Optional
 
 from ..models.workload import (
@@ -18,7 +20,8 @@ class WorkloadsResource(BaseResource):
     """Manages HarchOS workloads – the primary compute abstraction.
 
     Provides both async and sync methods for CRUD operations, status
-    management, and workload-specific actions like cancellation.
+    management, workload-specific actions like cancellation, and
+    long-polling via :meth:`wait` / :meth:`async_wait`.
     """
 
     _resource_path = "/workloads"
@@ -156,6 +159,52 @@ class WorkloadsResource(BaseResource):
         """
         await self._async_delete(workload_id)
 
+    async def async_wait(
+        self,
+        workload_id: str,
+        *,
+        timeout: float = 3600.0,
+        poll_interval: float = 2.0,
+        terminal_statuses: Optional[set] = None,
+    ) -> Workload:
+        """Wait for a workload to reach a terminal state (async).
+
+        Polls the workload at regular intervals until it reaches a
+        terminal status or the timeout is exceeded.
+
+        Args:
+            workload_id: The workload to wait for.
+            timeout: Maximum seconds to wait (default: 1 hour).
+            poll_interval: Seconds between polls (default: 2).
+            terminal_statuses: Statuses to consider terminal.
+                Defaults to ``completed``, ``failed``, ``cancelled``.
+
+        Returns:
+            The :class:`Workload` in its terminal state.
+
+        Raises:
+            TimeoutError: If the workload doesn't complete within *timeout*.
+        """
+        if terminal_statuses is None:
+            terminal_statuses = {"completed", "failed", "cancelled"}
+
+        start = asyncio.get_event_loop().time()
+        while True:
+            workload = await self.async_get(workload_id)
+            status_val = workload.status.value if isinstance(workload.status, WorkloadStatus) else str(workload.status)
+            if status_val in terminal_statuses:
+                return workload
+
+            elapsed = asyncio.get_event_loop().time() - start
+            if elapsed >= timeout:
+                from ..errors import TimeoutError as HarchOSTimeoutError
+                raise HarchOSTimeoutError(
+                    f"Workload {workload_id} did not reach terminal state within {timeout}s "
+                    f"(current status: {workload.status})"
+                )
+
+            await asyncio.sleep(poll_interval)
+
     # ------------------------------------------------------------------
     # Sync methods
     # ------------------------------------------------------------------
@@ -223,3 +272,57 @@ class WorkloadsResource(BaseResource):
     def delete(self, workload_id: str) -> None:
         """Delete a workload (sync)."""
         self._sync_delete(workload_id)
+
+    def wait(
+        self,
+        workload_id: str,
+        *,
+        timeout: float = 3600.0,
+        poll_interval: float = 2.0,
+        terminal_statuses: Optional[set] = None,
+    ) -> Workload:
+        """Wait for a workload to reach a terminal state (sync).
+
+        Polls the workload at regular intervals until it reaches a
+        terminal status or the timeout is exceeded.
+
+        Args:
+            workload_id: The workload to wait for.
+            timeout: Maximum seconds to wait (default: 1 hour).
+            poll_interval: Seconds between polls (default: 2).
+            terminal_statuses: Statuses to consider terminal.
+                Defaults to ``completed``, ``failed``, ``cancelled``.
+
+        Returns:
+            The :class:`Workload` in its terminal state.
+
+        Raises:
+            TimeoutError: If the workload doesn't complete within *timeout*.
+
+        Example::
+
+            client = HarchOSClient(api_key="hsk_...")
+            workload = client.workloads.create(spec)
+            # Block until the workload finishes (or 10 minutes max)
+            workload = client.workloads.wait(workload.metadata.id, timeout=600)
+            print(f"Final status: {workload.status}")
+        """
+        if terminal_statuses is None:
+            terminal_statuses = {"completed", "failed", "cancelled"}
+
+        start = time.monotonic()
+        while True:
+            workload = self.get(workload_id)
+            status_val = workload.status.value if isinstance(workload.status, WorkloadStatus) else str(workload.status)
+            if status_val in terminal_statuses:
+                return workload
+
+            elapsed = time.monotonic() - start
+            if elapsed >= timeout:
+                from ..errors import TimeoutError as HarchOSTimeoutError
+                raise HarchOSTimeoutError(
+                    f"Workload {workload_id} did not reach terminal state within {timeout}s "
+                    f"(current status: {workload.status})"
+                )
+
+            time.sleep(poll_interval)

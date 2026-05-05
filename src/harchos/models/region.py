@@ -53,3 +53,14 @@ class Region(HarchOSBaseModel):
     def has_hubs(self) -> bool:
         """Whether this region has any active hubs."""
         return self.hub_count > 0
+
+    def __repr__(self) -> str:
+        green = "GREEN" if self.is_green else "FOSSIL"
+        avail = "available" if self.available else "unavailable"
+        return (
+            f"Region("
+            f"{self.name!r} code={self.code!r} "
+            f"gpus={self.total_gpus} ci={self.avg_carbon_intensity}gCO2/kWh "
+            f"renewable={self.avg_renewable_percentage}% "
+            f"[{green}] {avail})"
+        )

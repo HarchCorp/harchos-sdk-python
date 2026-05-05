@@ -39,6 +39,15 @@ class PricingPlan(HarchOSBaseModel):
         """Estimate monthly cost for one GPU at this plan's rate."""
         return round(self.price_per_gpu_hour * hours_per_month, 2)
 
+    def __repr__(self) -> str:
+        return (
+            f"PricingPlan("
+            f"{self.name!r} "
+            f"gpu={self.gpu_type} "
+            f"price=${self.price_per_gpu_hour}/{self.currency} per GPU-hr "
+            f"tier={self.tier})"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Billing Record

@@ -170,6 +170,18 @@ class Model(HarchOSBaseModel):
         default=None, description="URL for inference requests"
     )
 
+    def __repr__(self) -> str:
+        status_val = self.status.value if isinstance(self.status, ModelStatus) else self.status
+        framework_val = self.framework.value if isinstance(self.framework, ModelFramework) else self.framework
+        task_val = self.task.value if isinstance(self.task, ModelTask) else self.task
+        return (
+            f"Model("
+            f"{self.metadata.name!r} "
+            f"framework={framework_val} "
+            f"task={task_val} "
+            f"status={status_val})"
+        )
+
 
 class ModelList(HarchOSBaseModel):
     """A list of models with optional pagination info."""

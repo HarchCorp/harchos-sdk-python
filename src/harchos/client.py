@@ -6,7 +6,8 @@ with the HarchOS API. Supports both sync and async usage patterns.
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Dict, Optional, Type, TypeVar
+import os
+from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Type, TypeVar
 
 from ._http import HttpTransport
 from ._logging import get_logger
@@ -49,6 +50,11 @@ class HarchOSClient:
             workloads = client.workloads.list()
             for wl in workloads.items:
                 print(wl.metadata.name)
+
+    Usage (from environment)::
+
+        # Reads HARCHOS_API_KEY, HARCHOS_BASE_URL, etc. from env
+        client = HarchOSClient.from_env()
 
     Args:
         api_key: HarchOS API key (starts with ``hsk_``).
@@ -287,3 +293,176 @@ class HarchOSClient:
             f"sovereignty={self._config.sovereignty!r}"
             f")"
         )
+
+    # ------------------------------------------------------------------
+    # Factory methods
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_env(cls, **overrides: Any) -> "HarchOSClient":
+        """Create a client configured from environment variables.
+
+        Reads the following environment variables:
+
+        - ``HARCHOS_API_KEY`` – API key (required)
+        - ``HARCHOS_BASE_URL`` – API base URL
+        - ``HARCHOS_REGION`` – Data residency region
+        - ``HARCHOS_SOVEREIGNTY`` – Sovereignty level
+        - ``HARCHOS_TIMEOUT`` – Request timeout
+        - ``HARCHOS_MAX_RETRIES`` – Max retry attempts
+
+        Args:
+            **overrides: Keyword overrides with highest priority.
+
+        Returns:
+            A new :class:`HarchOSClient` configured from the environment.
+
+        Example::
+
+            import os
+            os.environ["HARCHOS_API_KEY"] = "hsk_..."
+            client = HarchOSClient.from_env()
+        """
+        env_overrides: Dict[str, Any] = {}
+
+        env_mapping = {
+            "HARCHOS_API_KEY": ("api_key", str),
+            "HARCHOS_BASE_URL": ("base_url", str),
+            "HARCHOS_REGION": ("region", str),
+            "HARCHOS_SOVEREIGNTY": ("sovereignty", str),
+            "HARCHOS_TIMEOUT": ("timeout", float),
+            "HARCHOS_MAX_RETRIES": ("max_retries", int),
+        }
+
+        for env_var, (field_name, field_type) in env_mapping.items():
+            env_val = os.environ.get(env_var)
+            if env_val is not None:
+                if field_type is int:
+                    try:
+                        env_overrides[field_name] = int(env_val)
+                    except ValueError:
+                        pass
+                elif field_type is float:
+                    try:
+                        env_overrides[field_name] = float(env_val)
+                    except ValueError:
+                        pass
+                else:
+                    env_overrides[field_name] = env_val
+
+        # Overrides take precedence over env vars
+        env_overrides.update(overrides)
+        return cls(**env_overrides)
+
+    # ------------------------------------------------------------------
+    # Pagination helpers
+    # ------------------------------------------------------------------
+
+    def paginate(
+        self,
+        resource_method: Any,
+        *,
+        max_items: Optional[int] = None,
+        **kwargs: Any,
+    ) -> Iterator[Any]:
+        """Auto-paginate through a resource's list method (sync).
+
+        Automatically fetches all pages by incrementing the ``page``
+        parameter until no more items are returned.
+
+        Args:
+            resource_method: A bound resource list method (e.g. ``client.hubs.list``).
+            max_items: Maximum number of items to yield (``None`` = all).
+            **kwargs: Additional keyword arguments passed to the list method.
+
+        Yields:
+            Individual items from each page.
+
+        Example::
+
+            client = HarchOSClient(api_key="hsk_...")
+            for hub in client.paginate(client.hubs.list):
+                print(hub.metadata.name)
+        """
+        page = 1
+        yielded = 0
+        per_page = kwargs.pop("per_page", 50)
+
+        while True:
+            result = resource_method(page=page, per_page=per_page, **kwargs)
+            items = result.items if hasattr(result, "items") else result
+
+            if not items:
+                break
+
+            for item in items:
+                yield item
+                yielded += 1
+                if max_items is not None and yielded >= max_items:
+                    return
+
+            # Check if there are more pages
+            if hasattr(result, "pagination") and result.pagination is not None:
+                if not result.pagination.has_next:
+                    break
+            elif hasattr(result, "total") and result.total is not None:
+                if yielded >= result.total:
+                    break
+            elif len(items) < per_page:
+                break
+
+            page += 1
+
+    async def async_paginate(
+        self,
+        resource_method: Any,
+        *,
+        max_items: Optional[int] = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[Any]:
+        """Auto-paginate through a resource's async list method.
+
+        Automatically fetches all pages by incrementing the ``page``
+        parameter until no more items are returned.
+
+        Args:
+            resource_method: A bound async list method (e.g. ``client.hubs.async_list``).
+            max_items: Maximum number of items to yield (``None`` = all).
+            **kwargs: Additional keyword arguments passed to the list method.
+
+        Yields:
+            Individual items from each page.
+
+        Example::
+
+            async for hub in client.async_paginate(client.hubs.async_list):
+                print(hub.metadata.name)
+        """
+        page = 1
+        yielded = 0
+        per_page = kwargs.pop("per_page", 50)
+
+        while True:
+            result = await resource_method(page=page, per_page=per_page, **kwargs)
+            items = result.items if hasattr(result, "items") else result
+
+            if not items:
+                break
+
+            for item in items:
+                yield item
+                yielded += 1
+                if max_items is not None and yielded >= max_items:
+                    return
+
+            # Check if there are more pages
+            if hasattr(result, "pagination") and result.pagination is not None:
+                if not result.pagination.has_next:
+                    break
+            elif hasattr(result, "total") and result.total is not None:
+                if yielded >= result.total:
+                    break
+            elif len(items) < per_page:
+                break
+
+            page += 1

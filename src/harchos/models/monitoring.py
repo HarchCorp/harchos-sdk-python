@@ -63,6 +63,17 @@ class PlatformMetrics(HarchOSBaseModel):
         else:
             return "low"
 
+    def __repr__(self) -> str:
+        return (
+            f"PlatformMetrics("
+            f"hubs={self.total_hubs} "
+            f"gpus={self.total_gpus}({self.available_gpus} avail) "
+            f"util={self.gpu_utilization_percent:.0f}% "
+            f"renewable={self.avg_renewable_percentage:.0f}% "
+            f"ci={self.avg_carbon_intensity}gCO2/kWh "
+            f"co2_saved={self.total_co2_saved_kg}kg)"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Detailed Health

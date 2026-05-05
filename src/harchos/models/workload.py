@@ -167,6 +167,16 @@ class Workload(HarchOSBaseModel):
         end = self.completed_at or datetime.now(timezone.utc)
         return (end - self.started_at).total_seconds()
 
+    def __repr__(self) -> str:
+        gpu_info = f" gpus={self.spec.compute.gpu_count}" if self.spec.compute else ""
+        return (
+            f"Workload("
+            f"{self.metadata.name!r} "
+            f"type={self.spec.type if isinstance(self.spec.type, str) else self.spec.type.value} "
+            f"status={self.status if isinstance(self.status, str) else self.status.value}"
+            f"{gpu_info})"
+        )
+
 
 class WorkloadList(HarchOSBaseModel):
     """A list of workloads with optional pagination info."""
