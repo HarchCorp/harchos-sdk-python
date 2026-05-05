@@ -306,10 +306,14 @@ def cmd_config(args: argparse.Namespace) -> None:
     if subcmd == "show":
         from .config import HarchOSConfig
 
-        config = HarchOSConfig(
-            api_key=os.environ.get("HARCHOS_API_KEY"),
-            base_url=os.environ.get("HARCHOS_BASE_URL"),
-        )
+        config_kwargs: Dict[str, Any] = {}
+        api_key = os.environ.get("HARCHOS_API_KEY")
+        base_url = os.environ.get("HARCHOS_BASE_URL")
+        if api_key:
+            config_kwargs["api_key"] = api_key
+        if base_url:
+            config_kwargs["base_url"] = base_url
+        config = HarchOSConfig(**config_kwargs)
 
         print(f"\n  HarchOS SDK Configuration")
         print(f"  {'=' * 30}")
