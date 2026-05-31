@@ -62,6 +62,7 @@ from ._types import (
     CarbonForecast,
     CarbonForecastPoint,
     CarbonIntensity,
+    CarbonMetrics,
     CarbonOptimalHub,
     CarbonOptimizeResult,
     ChatChoice,
@@ -111,6 +112,7 @@ __all__ = [
     "CarbonOptimalHub",
     "CarbonOptimizeResult",
     "CarbonDashboard",
+    "CarbonMetrics",
     # Types — Inference
     "ModelInfo",
     "ModelList",

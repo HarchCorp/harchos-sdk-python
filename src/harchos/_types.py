@@ -24,34 +24,40 @@ class CarbonFootprint(BaseModel):
     API response includes real-time carbon tracking.
     """
 
-    gco2: float = Field(..., description="Grams of CO2 emitted")
+    gco2_per_request: float = Field(..., description="Grams of CO2 emitted for this request")
     hub_region: str = Field(..., description="Hub region where inference ran")
+    carbon_intensity_gco2_kwh: float = Field(
+        ..., ge=0, description="Carbon intensity at hub in gCO2/kWh"
+    )
     renewable_percentage: float = Field(
         ..., ge=0, le=100, description="Renewable energy percentage at hub"
     )
-    grid_intensity_gco2_kwh: float = Field(
-        ..., ge=0, description="Grid carbon intensity in gCO2/kWh"
+    gpu_type: str = Field(default="", description="GPU type used for inference")
+    estimated_power_watts: float = Field(default=0.0, ge=0, description="Estimated GPU power consumption in watts")
+    inference_duration_seconds: float = Field(default=0.0, ge=0, description="Inference duration in seconds")
+    carbon_saved_vs_average_gco2: float = Field(
+        default=0.0, ge=0, description="CO2 saved compared to global average grid"
     )
-    offset_gco2: float = Field(
-        default=0.0, ge=0, description="CO2 offset by carbon-aware scheduling"
-    )
-    source: str = Field(
-        default="electricity_maps", description="Carbon data source"
-    )
+
+    # Backward-compatible aliases
+    @property
+    def gco2(self) -> float:
+        """Grams of CO2 emitted (alias for gco2_per_request)."""
+        return self.gco2_per_request
 
     @property
     def net_gco2(self) -> float:
-        """Net CO2 after offsets."""
-        return max(0.0, self.gco2 - self.offset_gco2)
+        """Net CO2 after savings."""
+        return max(0.0, self.gco2_per_request - self.carbon_saved_vs_average_gco2)
 
     @property
     def is_green(self) -> bool:
         """Whether the inference ran on a green hub (< 200 gCO2/kWh)."""
-        return self.grid_intensity_gco2_kwh < 200.0
+        return self.carbon_intensity_gco2_kwh < 200.0
 
     def __repr__(self) -> str:
         return (
-            f"CarbonFootprint(gco2={self.gco2}, region={self.hub_region!r}, "
+            f"CarbonFootprint(gco2={self.gco2_per_request}, region={self.hub_region!r}, "
             f"renewable={self.renewable_percentage}%)"
         )
 
@@ -144,8 +150,8 @@ class CompletionResponse(BaseModel):
     usage: Usage = Field(default_factory=Usage)
     carbon_footprint: CarbonFootprint = Field(
         default_factory=lambda: CarbonFootprint(
-            gco2=0.0, hub_region="unknown", renewable_percentage=0.0,
-            grid_intensity_gco2_kwh=0.0,
+            gco2_per_request=0.0, hub_region="unknown", renewable_percentage=0.0,
+            carbon_intensity_gco2_kwh=0.0,
         )
     )
 
@@ -167,8 +173,8 @@ class ChatCompletionResponse(BaseModel):
     usage: Usage = Field(default_factory=Usage)
     carbon_footprint: CarbonFootprint = Field(
         default_factory=lambda: CarbonFootprint(
-            gco2=0.0, hub_region="unknown", renewable_percentage=0.0,
-            grid_intensity_gco2_kwh=0.0,
+            gco2_per_request=0.0, hub_region="unknown", renewable_percentage=0.0,
+            carbon_intensity_gco2_kwh=0.0,
         )
     )
 
@@ -386,10 +392,12 @@ class CarbonIntensityList(BaseModel):
 class CarbonForecastPoint(BaseModel):
     """A single forecast data point."""
 
-    timestamp: datetime = Field(..., description="Forecast timestamp")
+    reading_datetime: datetime = Field(..., alias="datetime", description="Forecast timestamp")
     carbon_intensity_gco2_kwh: float = Field(..., ge=0)
     renewable_percentage: float = Field(..., ge=0, le=100)
     is_green: bool = Field(default=False)
+
+    model_config = {"populate_by_name": True}
 
 
 class CarbonForecast(BaseModel):
@@ -442,17 +450,26 @@ class CarbonOptimizeResult(BaseModel):
     reason: str = Field(default="")
 
 
-class CarbonDashboard(BaseModel):
-    """Full carbon-aware dashboard data."""
-
+class CarbonMetrics(BaseModel):
+    """Aggregate carbon metrics."""
     total_carbon_saved_kg: float = Field(default=0.0)
     total_workloads_optimized: int = Field(default=0)
     total_workloads_deferred: int = Field(default=0)
-    avg_carbon_intensity_gco2_kwh: float = Field(default=0.0)
+    average_carbon_intensity_gco2_kwh: float = Field(default=0.0)
+    best_hub_id: Optional[str] = None
     best_hub_name: str = Field(default="")
     best_hub_carbon_intensity: float = Field(default=0.0)
     worst_hub_carbon_intensity: float = Field(default=0.0)
+    period_start: Optional[datetime] = None
+    period_end: Optional[datetime] = None
+
+
+class CarbonDashboard(BaseModel):
+    """Full carbon-aware dashboard data."""
+
+    metrics: CarbonMetrics = Field(default_factory=CarbonMetrics)
     hub_intensities: List[CarbonIntensity] = Field(default_factory=list)
+    optimization_log: List[Dict[str, Any]] = Field(default_factory=list)
     green_windows: List[Dict[str, Any]] = Field(default_factory=list)
 
 

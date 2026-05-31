@@ -230,9 +230,9 @@ class TestPydanticValidation:
     def test_carbon_footprint_renewable_range(self) -> None:
         with pytest.raises(Exception):  # Pydantic ValidationError
             CarbonFootprint(
-                gco2=0.1, hub_region="morocco",
+                gco2_per_request=0.1, hub_region="morocco",
                 renewable_percentage=150.0,  # > 100
-                grid_intensity_gco2_kwh=100.0,
+                carbon_intensity_gco2_kwh=100.0,
             )
 
     def test_workload_spec_requires_name(self) -> None:

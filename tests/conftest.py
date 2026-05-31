@@ -166,10 +166,10 @@ def sample_chat_completion_data() -> Dict[str, Any]:
         ],
         "usage": {"prompt_tokens": 10, "completion_tokens": 8, "total_tokens": 18},
         "carbon_footprint": {
-            "gco2": 0.12,
+            "gco2_per_request": 0.12,
             "hub_region": "morocco",
             "renewable_percentage": 75.0,
-            "grid_intensity_gco2_kwh": 120.0,
+            "carbon_intensity_gco2_kwh": 120.0,
         },
     }
 

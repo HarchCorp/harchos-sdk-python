@@ -51,51 +51,52 @@ class TestCarbonFootprintModel:
 
     def test_basic_creation(self) -> None:
         cf = CarbonFootprint(
-            gco2=0.12,
+            gco2_per_request=0.12,
             hub_region="morocco",
             renewable_percentage=75.0,
-            grid_intensity_gco2_kwh=120.0,
+            carbon_intensity_gco2_kwh=120.0,
         )
+        assert cf.gco2_per_request == 0.12
         assert cf.gco2 == 0.12
         assert cf.hub_region == "morocco"
 
     def test_net_gco2(self) -> None:
         cf = CarbonFootprint(
-            gco2=10.0,
+            gco2_per_request=10.0,
             hub_region="morocco",
             renewable_percentage=75.0,
-            grid_intensity_gco2_kwh=120.0,
-            offset_gco2=3.0,
+            carbon_intensity_gco2_kwh=120.0,
+            carbon_saved_vs_average_gco2=3.0,
         )
         assert cf.net_gco2 == 7.0
 
     def test_net_gco2_cannot_go_negative(self) -> None:
         cf = CarbonFootprint(
-            gco2=5.0,
+            gco2_per_request=5.0,
             hub_region="morocco",
             renewable_percentage=75.0,
-            grid_intensity_gco2_kwh=120.0,
-            offset_gco2=10.0,
+            carbon_intensity_gco2_kwh=120.0,
+            carbon_saved_vs_average_gco2=10.0,
         )
         assert cf.net_gco2 == 0.0
 
     def test_is_green(self) -> None:
         cf_green = CarbonFootprint(
-            gco2=0.1, hub_region="morocco",
-            renewable_percentage=90.0, grid_intensity_gco2_kwh=100.0,
+            gco2_per_request=0.1, hub_region="morocco",
+            renewable_percentage=90.0, carbon_intensity_gco2_kwh=100.0,
         )
         assert cf_green.is_green is True
 
         cf_fossil = CarbonFootprint(
-            gco2=0.5, hub_region="us-east",
-            renewable_percentage=20.0, grid_intensity_gco2_kwh=400.0,
+            gco2_per_request=0.5, hub_region="us-east",
+            renewable_percentage=20.0, carbon_intensity_gco2_kwh=400.0,
         )
         assert cf_fossil.is_green is False
 
     def test_repr(self) -> None:
         cf = CarbonFootprint(
-            gco2=0.12, hub_region="morocco",
-            renewable_percentage=75.0, grid_intensity_gco2_kwh=120.0,
+            gco2_per_request=0.12, hub_region="morocco",
+            renewable_percentage=75.0, carbon_intensity_gco2_kwh=120.0,
         )
         r = repr(cf)
         assert "CarbonFootprint" in r
@@ -155,10 +156,11 @@ class TestChatCompletionResponseModel:
             choices=[ChatChoice(message=ChatMessage(role="assistant", content="Hi"))],
             usage=Usage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
             carbon_footprint=CarbonFootprint(
-                gco2=0.12, hub_region="morocco",
-                renewable_percentage=75.0, grid_intensity_gco2_kwh=120.0,
+                gco2_per_request=0.12, hub_region="morocco",
+                renewable_percentage=75.0, carbon_intensity_gco2_kwh=120.0,
             ),
         )
+        assert resp.carbon_footprint.gco2_per_request == 0.12
         assert resp.carbon_footprint.gco2 == 0.12
 
 
@@ -417,8 +419,8 @@ class TestInferenceResource:
             ],
             "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
             "carbon_footprint": {
-                "gco2": 0.12, "hub_region": "morocco",
-                "renewable_percentage": 75.0, "grid_intensity_gco2_kwh": 120.0,
+                "gco2_per_request": 0.12, "hub_region": "morocco",
+                "renewable_percentage": 75.0, "carbon_intensity_gco2_kwh": 120.0,
             },
         }
         resource = InferenceResource(client)
@@ -428,7 +430,7 @@ class TestInferenceResource:
         )
         assert isinstance(result, ChatCompletionResponse)
         assert result.content == "Hello!"
-        assert result.carbon_footprint.gco2 == 0.12
+        assert result.carbon_footprint.gco2_per_request == 0.12
 
 
 class TestAsyncInferenceResource:

@@ -109,7 +109,7 @@ class CarbonResource:
         Returns:
             A :class:`CarbonIntensity` object.
         """
-        result = self._client.request("GET", "/carbon/intensity", params={"zone": zone})
+        result = self._client.request("GET", f"/carbon/intensity/{zone}")
         return CarbonIntensity.model_validate(result)
 
     def optimize(
@@ -165,7 +165,7 @@ class CarbonResource:
         Returns:
             A :class:`CarbonForecast` with forecast data points and green windows.
         """
-        result = self._client.request("GET", "/carbon/forecast", params={"zone": zone})
+        result = self._client.request("GET", f"/carbon/forecast/{zone}")
         return CarbonForecast.model_validate(result)
 
     def dashboard(self) -> CarbonDashboard:
@@ -204,7 +204,7 @@ class CarbonResource:
         if carbon_max_gco2 is not None:
             params["carbon_max_gco2"] = carbon_max_gco2
 
-        result = self._client.request("GET", "/carbon/optimal-hub", params=params)
+        result = self._client.request("POST", "/carbon/optimal-hub", json=params)
         return CarbonOptimalHub.model_validate(result)
 
     @contextmanager
@@ -310,7 +310,7 @@ class AsyncCarbonResource:
 
     async def intensity(self, zone: str) -> CarbonIntensity:
         """Get real-time carbon intensity for a zone (async)."""
-        result = await self._client.request("GET", "/carbon/intensity", params={"zone": zone})
+        result = await self._client.request("GET", f"/carbon/intensity/{zone}")
         return CarbonIntensity.model_validate(result)
 
     async def optimize(
@@ -345,7 +345,7 @@ class AsyncCarbonResource:
 
     async def forecast(self, zone: str) -> CarbonForecast:
         """Get carbon intensity forecast for a zone (async)."""
-        result = await self._client.request("GET", "/carbon/forecast", params={"zone": zone})
+        result = await self._client.request("GET", f"/carbon/forecast/{zone}")
         return CarbonForecast.model_validate(result)
 
     async def dashboard(self) -> CarbonDashboard:
@@ -370,7 +370,7 @@ class AsyncCarbonResource:
         if carbon_max_gco2 is not None:
             params["carbon_max_gco2"] = carbon_max_gco2
 
-        result = await self._client.request("GET", "/carbon/optimal-hub", params=params)
+        result = await self._client.request("POST", "/carbon/optimal-hub", json=params)
         return CarbonOptimalHub.model_validate(result)
 
     @asynccontextmanager

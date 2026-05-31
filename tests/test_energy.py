@@ -39,7 +39,7 @@ class TestCarbonResource:
         assert result.zone == "MA"
         assert result.carbon_intensity_gco2_kwh == 150.0
         assert result.is_green is True  # 150 < 200
-        client.request.assert_called_once_with("GET", "/carbon/intensity", params={"zone": "MA"})
+        client.request.assert_called_once_with("GET", "/carbon/intensity/MA")
 
     def test_intensity_high_carbon(self) -> None:
         client = MagicMock(spec=HarchOS)
@@ -97,7 +97,7 @@ class TestCarbonResource:
             "zone_name": "Morocco",
             "forecast": [
                 {
-                    "timestamp": "2024-01-15T12:00:00Z",
+                    "datetime": "2024-01-15T12:00:00Z",
                     "carbon_intensity_gco2_kwh": 100.0,
                     "renewable_percentage": 80.0,
                     "is_green": True,
@@ -113,7 +113,7 @@ class TestCarbonResource:
         assert result.zone == "MA"
         assert len(result.forecast) == 1
         assert result.best_window is not None
-        client.request.assert_called_once_with("GET", "/carbon/forecast", params={"zone": "MA"})
+        client.request.assert_called_once_with("GET", "/carbon/forecast/MA")
 
     def test_forecast_no_green_windows(self) -> None:
         client = MagicMock(spec=HarchOS)
@@ -130,19 +130,24 @@ class TestCarbonResource:
     def test_dashboard(self) -> None:
         client = MagicMock(spec=HarchOS)
         client.request.return_value = {
-            "total_carbon_saved_kg": 150.0,
-            "total_workloads_optimized": 42,
-            "total_workloads_deferred": 10,
-            "avg_carbon_intensity_gco2_kwh": 130.0,
-            "best_hub_name": "morocco-primary",
-            "best_hub_carbon_intensity": 80.0,
-            "worst_hub_carbon_intensity": 500.0,
+            "metrics": {
+                "total_carbon_saved_kg": 150.0,
+                "total_workloads_optimized": 42,
+                "total_workloads_deferred": 10,
+                "average_carbon_intensity_gco2_kwh": 130.0,
+                "best_hub_name": "morocco-primary",
+                "best_hub_carbon_intensity": 80.0,
+                "worst_hub_carbon_intensity": 500.0,
+            },
+            "hub_intensities": [],
+            "optimization_log": [],
+            "green_windows": [],
         }
         resource = CarbonResource(client)
         result = resource.dashboard()
         assert isinstance(result, CarbonDashboard)
-        assert result.total_carbon_saved_kg == 150.0
-        assert result.total_workloads_optimized == 42
+        assert result.metrics.total_carbon_saved_kg == 150.0
+        assert result.metrics.total_workloads_optimized == 42
         client.request.assert_called_once_with("GET", "/carbon/dashboard")
 
     def test_optimal_hub(self) -> None:
@@ -245,13 +250,18 @@ class TestAsyncCarbonResource:
     async def test_dashboard(self) -> None:
         client = MagicMock(spec=AsyncHarchOS)
         client.request = AsyncMock(return_value={
-            "total_carbon_saved_kg": 150.0,
-            "total_workloads_optimized": 42,
+            "metrics": {
+                "total_carbon_saved_kg": 150.0,
+                "total_workloads_optimized": 42,
+            },
+            "hub_intensities": [],
+            "optimization_log": [],
+            "green_windows": [],
         })
         resource = AsyncCarbonResource(client)
         result = await resource.dashboard()
         assert isinstance(result, CarbonDashboard)
-        assert result.total_carbon_saved_kg == 150.0
+        assert result.metrics.total_carbon_saved_kg == 150.0
 
     @pytest.mark.asyncio
     async def test_optimal_hub(self) -> None:
