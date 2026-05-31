@@ -12,8 +12,8 @@ Provides carbon-aware scheduling tools unique to HarchOS:
 from __future__ import annotations
 
 import threading
-from contextlib import contextmanager
-from typing import Any, Dict, Generator, List, Optional
+from contextlib import asynccontextmanager, contextmanager
+from typing import Any, AsyncGenerator, Dict, Generator, List, Optional
 
 from .._types import (
     CarbonDashboard,
@@ -373,8 +373,8 @@ class AsyncCarbonResource:
         result = await self._client.request("GET", "/carbon/optimal-hub", params=params)
         return CarbonOptimalHub.model_validate(result)
 
-    @contextmanager
-    def tracker(self) -> Generator[_AsyncCarbonTracker, None, None]:
+    @asynccontextmanager
+    async def tracker(self) -> AsyncGenerator[_AsyncCarbonTracker, None]:
         """Context manager to track total carbon across async requests.
 
         Usage::

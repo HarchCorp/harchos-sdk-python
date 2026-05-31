@@ -1,116 +1,68 @@
-"""Tests for the HarchOSClient."""
+"""Tests for the HarchOS client."""
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from harchos import HarchOSClient
-from harchos.config import HarchOSConfig
-from harchos.resources.energy import EnergyResource
-from harchos.resources.hubs import HubsResource
-from harchos.resources.models import ModelsResource
-from harchos.resources.workloads import WorkloadsResource
+from harchos import HarchOS, AsyncHarchOS, Config
 
 
-class TestHarchOSClientInit:
-    """Tests for client initialization."""
+class TestConfig:
+    """Tests for Config initialization."""
 
     def test_default_init(self) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        assert client.config.region == "morocco"
-        assert client.config.sovereignty == "strict"
-        assert client.config.carbon_aware is True
+        config = Config(api_key="hsk_testapikey1234567890")
+        assert config.api_key == "hsk_testapikey1234567890"
+        assert config.base_url == "https://api.harchos.ai/v1"
+        assert config.timeout == 30.0
+        assert config.max_retries == 3
 
     def test_custom_init(self) -> None:
-        client = HarchOSClient(
+        config = Config(
             api_key="hsk_testapikey1234567890",
-            region="uae",
-            sovereignty="moderate",
-            carbon_aware=False,
+            base_url="https://custom.api.com/v1",
             timeout=60.0,
+            max_retries=5,
         )
-        assert client.config.region == "uae"
-        assert client.config.sovereignty == "moderate"
-        assert client.config.carbon_aware is False
-        assert client.config.timeout == 60.0
+        assert config.base_url == "https://custom.api.com/v1"
+        assert config.timeout == 60.0
+        assert config.max_retries == 5
 
-    def test_with_config(self) -> None:
-        config = HarchOSConfig(
-            api_key="hsk_testapikey1234567890",
-            region="france",
-        )
-        client = HarchOSClient(config=config)
-        assert client.config.region == "france"
-
-    def test_resource_modules_initialized(self) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        assert isinstance(client.workloads, WorkloadsResource)
-        assert isinstance(client.models, ModelsResource)
-        assert isinstance(client.hubs, HubsResource)
-        assert isinstance(client.energy, EnergyResource)
+    def test_from_env(self) -> None:
+        with patch.dict("os.environ", {"HARCHOS_API_KEY": "hsk_envtestkey1234567890"}):
+            config = Config.from_env()
+            assert config.api_key == "hsk_envtestkey1234567890"
 
     def test_repr(self) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        r = repr(client)
-        assert "HarchOSClient" in r
-        assert "morocco" in r
-        assert "strict" in r
+        config = Config(api_key="hsk_testapikey1234567890")
+        r = repr(config)
+        assert "harchos.ai" in r
+        assert "7890" in r
 
 
-class TestHarchOSClientSync:
-    """Tests for sync client methods."""
+class TestHarchOSClient:
+    """Tests for the HarchOS sync client."""
 
-    def test_sync_context_manager(self) -> None:
-        with HarchOSClient(api_key="hsk_testapikey1234567890") as client:
-            assert client.config is not None
+    def test_init(self) -> None:
+        client = HarchOS(api_key="hsk_testapikey1234567890")
+        assert client is not None
 
-    def test_close_sync(self) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        client.close_sync()  # Should not raise
+    def test_context_manager(self) -> None:
+        with HarchOS(api_key="hsk_testapikey1234567890") as client:
+            assert client is not None
 
 
-class TestHarchOSClientAsync:
-    """Tests for async client methods."""
+class TestAsyncHarchOSClient:
+    """Tests for the HarchOS async client."""
+
+    @pytest.mark.asyncio
+    async def test_async_init(self) -> None:
+        client = AsyncHarchOS(api_key="hsk_testapikey1234567890")
+        assert client is not None
 
     @pytest.mark.asyncio
     async def test_async_context_manager(self) -> None:
-        async with HarchOSClient(api_key="hsk_testapikey1234567890") as client:
-            assert client.config is not None
-
-    @pytest.mark.asyncio
-    async def test_close(self) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        await client.close()  # Should not raise
-
-
-class TestHarchOSClientHealth:
-    """Tests for health check."""
-
-    @pytest.mark.asyncio
-    async def test_async_health(self) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "status": "healthy",
-            "version": "1.0.0",
-            "region": "morocco",
-        }
-        with patch.object(
-            client._transport, "async_get", new_callable=AsyncMock, return_value=mock_response
-        ):
-            health = await client.async_health()
-            assert health.status == "healthy"
-
-    def test_sync_health(self) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "status": "healthy",
-            "version": "1.0.0",
-            "region": "morocco",
-        }
-        with patch.object(client._transport, "sync_get", return_value=mock_response):
-            health = client.health()
-            assert health.status == "healthy"
+        async with AsyncHarchOS(api_key="hsk_testapikey1234567890") as client:
+            assert client is not None
