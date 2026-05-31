@@ -26,7 +26,7 @@ def custom_config() -> HarchOSConfig:
     """Return a HarchOSConfig with custom settings."""
     return HarchOSConfig(
         api_key="hsk_testapikey1234567890",
-        base_url="https://custom.api.harchos.io/v1",
+        base_url="https://custom.api.harchos.ai/v1",
         region="uae",
         sovereignty="moderate",
         carbon_aware=False,

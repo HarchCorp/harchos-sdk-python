@@ -22,7 +22,7 @@ class TestHarchOSConfig:
         assert config.region == "morocco"
         assert config.sovereignty == "strict"
         assert config.carbon_aware is True
-        assert config.base_url == "https://api.harchos.io/v1"
+        assert config.base_url == "https://api.harchos.ai/v1"
         assert config.timeout == 30.0
         assert config.max_retries == 3
 
@@ -48,8 +48,8 @@ class TestHarchOSConfig:
         assert config.region == "eu_west"
 
     def test_base_url_trailing_slash_stripped(self) -> None:
-        config = HarchOSConfig(base_url="https://api.harchos.io/v1/")
-        assert config.base_url == "https://api.harchos.io/v1"
+        config = HarchOSConfig(base_url="https://api.harchos.ai/v1/")
+        assert config.base_url == "https://api.harchos.ai/v1"
 
     def test_api_key_strip_whitespace(self, clean_env: None) -> None:
         config = HarchOSConfig(api_key="  hsk_testkey1234567890  ")
@@ -97,7 +97,7 @@ class TestProfile:
     def test_default_values(self) -> None:
         profile = Profile(name="test")
         assert profile.name == "test"
-        assert profile.base_url == "https://api.harchos.io/v1"
+        assert profile.base_url == "https://api.harchos.ai/v1"
         assert profile.region == "morocco"
         assert profile.sovereignty == "strict"
         assert profile.carbon_aware is True
