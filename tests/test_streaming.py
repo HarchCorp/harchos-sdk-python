@@ -1,10 +1,10 @@
-"""Tests for streaming support."""
+"""Tests for streaming support (v0.3)."""
 
 from __future__ import annotations
 
 import pytest
 
-from harchos._streaming import SSEEvent, SSEParser
+from harchos._streaming import SSEEvent, SSEParser, parse_stream_chunk
 
 
 class TestSSEEvent:
@@ -55,18 +55,6 @@ class TestSSEParser:
         assert len(events) == 1
         assert events[0].data == "line1\nline2\nline3"
 
-    def test_event_id(self) -> None:
-        parser = SSEParser()
-        chunk = "id: evt123\ndata: test\n\n"
-        events = parser.feed(chunk)
-        assert events[0].id == "evt123"
-
-    def test_retry_field(self) -> None:
-        parser = SSEParser()
-        chunk = "retry: 5000\ndata: test\n\n"
-        events = parser.feed(chunk)
-        assert events[0].retry == 5000
-
     def test_comment_ignored(self) -> None:
         parser = SSEParser()
         chunk = ": this is a comment\ndata: test\n\n"
@@ -98,26 +86,38 @@ class TestSSEParser:
         assert len(events) == 1
         assert events[0].data == "test"
 
-    def test_close_flushes_remaining(self) -> None:
+    def test_flush_remaining(self) -> None:
         parser = SSEParser()
-        parser.feed("data: unflushed")
-        events = parser.close()
+        # Feed a complete line (with newline) that hasn't been dispatched yet
+        parser.feed("data: unflushed\n")
+        events = parser.flush()
         assert len(events) == 1
         assert events[0].data == "unflushed"
 
-    def test_close_empty(self) -> None:
+    def test_flush_empty(self) -> None:
         parser = SSEParser()
-        events = parser.close()
+        events = parser.flush()
         assert len(events) == 0
-
-    def test_invalid_retry_ignored(self) -> None:
-        parser = SSEParser()
-        chunk = "retry: notanumber\ndata: test\n\n"
-        events = parser.feed(chunk)
-        assert events[0].retry is None
 
     def test_field_with_colon_in_value(self) -> None:
         parser = SSEParser()
-        chunk = "data: {\"key\": \"value\"}\n\n"
+        chunk = 'data: {"key": "value"}\n\n'
         events = parser.feed(chunk)
         assert events[0].data == '{"key": "value"}'
+
+
+class TestParseStreamChunk:
+    """Tests for parse_stream_chunk helper."""
+
+    def test_done_sentinel_returns_none(self) -> None:
+        assert parse_stream_chunk("[DONE]") is None
+
+    def test_done_with_whitespace_returns_none(self) -> None:
+        assert parse_stream_chunk("  [DONE]  ") is None
+
+    def test_invalid_json_returns_none(self) -> None:
+        assert parse_stream_chunk("not json at all") is None
+
+    def test_valid_json_returns_parsed(self) -> None:
+        result = parse_stream_chunk('{"key": "value"}')
+        assert result == {"key": "value"}

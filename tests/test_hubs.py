@@ -1,128 +1,123 @@
-"""Tests for hub resource module."""
+"""Tests for the HubsResource module (v0.3)."""
 
 from __future__ import annotations
 
-from typing import Any, Dict
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from harchos import HarchOSClient
-from harchos.models.hub import Hub, HubCapacity, HubList, HubSpec, HubStatus
+from harchos._client import HarchOS, AsyncHarchOS
+from harchos._types import Hub, HubCapacity, HubList
+from harchos.resources.hubs import HubsResource, AsyncHubsResource
 
 
-class TestHubsAsync:
-    """Tests for async hub operations."""
+class TestHubsResource:
+    """Tests for the synchronous HubsResource."""
 
-    @pytest.mark.asyncio
-    async def test_async_list(self, sample_hub_data: Dict[str, Any]) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "items": [sample_hub_data],
+    def test_list(self) -> None:
+        client = MagicMock(spec=HarchOS)
+        client.request.return_value = {
+            "items": [
+                {
+                    "id": "hub_morocco1",
+                    "name": "morocco-primary",
+                    "region": "morocco",
+                    "status": "ready",
+                    "tier": "enterprise",
+                    "active_workloads": 4,
+                },
+            ],
             "total": 1,
         }
-        with patch.object(
-            client._transport, "async_get", new_callable=AsyncMock, return_value=mock_response
-        ):
-            result = await client.hubs.async_list()
-            assert isinstance(result, HubList)
-            assert result.total == 1
+        resource = HubsResource(client)
+        result = resource.list()
+        assert isinstance(result, HubList)
+        assert result.total == 1
+        assert len(result) == 1
+        assert result.items[0].id == "hub_morocco1"
+        client.request.assert_called_once()
+        call_args = client.request.call_args
+        assert call_args[0][0] == "GET"
+        assert call_args[0][1] == "/hubs"
 
-    @pytest.mark.asyncio
-    async def test_async_get(self, sample_hub_data: Dict[str, Any]) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        mock_response = MagicMock()
-        mock_response.json.return_value = sample_hub_data
-        with patch.object(
-            client._transport, "async_get", new_callable=AsyncMock, return_value=mock_response
-        ):
-            hub = await client.hubs.async_get("hub_xyz789")
-            assert hub.metadata.id == "hub_xyz789"
+    def test_list_with_filters(self) -> None:
+        client = MagicMock(spec=HarchOS)
+        client.request.return_value = {"items": [], "total": 0}
+        resource = HubsResource(client)
+        resource.list(region="morocco", status="ready", tier="enterprise")
+        call_args = client.request.call_args
+        params = call_args[1]["params"]
+        assert params["region"] == "morocco"
+        assert params["status"] == "ready"
+        assert params["tier"] == "enterprise"
 
-    @pytest.mark.asyncio
-    async def test_async_create(self, sample_hub_data: Dict[str, Any]) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        mock_response = MagicMock()
-        mock_response.json.return_value = sample_hub_data
-        with patch.object(
-            client._transport, "async_post", new_callable=AsyncMock, return_value=mock_response
-        ):
-            spec = HubSpec(name="test-hub", region="morocco")
-            hub = await client.hubs.async_create(spec)
-            assert isinstance(hub, Hub)
-
-    @pytest.mark.asyncio
-    async def test_async_capacity(self, sample_hub_data: Dict[str, Any]) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        capacity_data = sample_hub_data["capacity"]
-        mock_response = MagicMock()
-        mock_response.json.return_value = capacity_data
-        with patch.object(
-            client._transport, "async_get", new_callable=AsyncMock, return_value=mock_response
-        ):
-            cap = await client.hubs.async_capacity("hub_xyz789")
-            assert isinstance(cap, HubCapacity)
-            assert cap.total_gpus == 16
-
-    @pytest.mark.asyncio
-    async def test_async_scale(self, sample_hub_data: Dict[str, Any]) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        scaled_data = {**sample_hub_data, "status": "scaling"}
-        mock_response = MagicMock()
-        mock_response.json.return_value = scaled_data
-        with patch.object(
-            client._transport, "async_patch", new_callable=AsyncMock, return_value=mock_response
-        ):
-            hub = await client.hubs.async_scale("hub_xyz789", target_gpu_count=24)
-            assert hub.status == HubStatus.SCALING
-
-
-class TestHubsSync:
-    """Tests for sync hub operations."""
-
-    def test_list(self, sample_hub_data: Dict[str, Any]) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "items": [sample_hub_data],
-            "total": 1,
+    def test_get(self) -> None:
+        client = MagicMock(spec=HarchOS)
+        client.request.return_value = {
+            "id": "hub_morocco1",
+            "name": "morocco-primary",
+            "region": "morocco",
+            "status": "ready",
+            "tier": "enterprise",
+            "capacity": {
+                "total_gpus": 16,
+                "available_gpus": 8,
+                "total_cpu_cores": 256,
+                "available_cpu_cores": 128,
+                "total_memory_gb": 2048.0,
+                "available_memory_gb": 1024.0,
+            },
         }
-        with patch.object(client._transport, "sync_get", return_value=mock_response):
-            result = client.hubs.list()
-            assert isinstance(result, HubList)
+        resource = HubsResource(client)
+        result = resource.get("hub_morocco1")
+        assert isinstance(result, Hub)
+        assert result.id == "hub_morocco1"
+        assert result.region == "morocco"
+        assert result.capacity is not None
+        assert result.capacity.total_gpus == 16
+        client.request.assert_called_once_with("GET", "/hubs/hub_morocco1")
 
-    def test_get(self, sample_hub_data: Dict[str, Any]) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        mock_response = MagicMock()
-        mock_response.json.return_value = sample_hub_data
-        with patch.object(client._transport, "sync_get", return_value=mock_response):
-            hub = client.hubs.get("hub_xyz789")
-            assert hub.metadata.id == "hub_xyz789"
 
-    def test_capacity(self, sample_hub_data: Dict[str, Any]) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        capacity_data = sample_hub_data["capacity"]
-        mock_response = MagicMock()
-        mock_response.json.return_value = capacity_data
-        with patch.object(client._transport, "sync_get", return_value=mock_response):
-            cap = client.hubs.capacity("hub_xyz789")
-            assert isinstance(cap, HubCapacity)
+class TestAsyncHubsResource:
+    """Tests for the asynchronous AsyncHubsResource."""
 
-    def test_scale(self, sample_hub_data: Dict[str, Any]) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        scaled_data = {**sample_hub_data, "status": "scaling"}
-        mock_response = MagicMock()
-        mock_response.json.return_value = scaled_data
-        with patch.object(client._transport, "sync_patch", return_value=mock_response):
-            hub = client.hubs.scale("hub_xyz789", target_gpu_count=24)
-            assert hub.status == HubStatus.SCALING
+    @pytest.mark.asyncio
+    async def test_list(self) -> None:
+        client = MagicMock(spec=AsyncHarchOS)
+        client.request = AsyncMock(return_value={
+            "items": [
+                {"id": "hub_1", "name": "hub1", "region": "morocco"},
+            ],
+            "total": 1,
+        })
+        resource = AsyncHubsResource(client)
+        result = await resource.list()
+        assert isinstance(result, HubList)
+        assert result.total == 1
 
-    def test_drain(self, sample_hub_data: Dict[str, Any]) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        drained_data = {**sample_hub_data, "status": "draining"}
-        mock_response = MagicMock()
-        mock_response.json.return_value = drained_data
-        with patch.object(client._transport, "sync_patch", return_value=mock_response):
-            hub = client.hubs.drain("hub_xyz789")
-            assert hub.status == HubStatus.DRAINING
+    @pytest.mark.asyncio
+    async def test_get(self) -> None:
+        client = MagicMock(spec=AsyncHarchOS)
+        client.request = AsyncMock(return_value={
+            "id": "hub_1",
+            "name": "morocco-primary",
+            "region": "morocco",
+        })
+        resource = AsyncHubsResource(client)
+        result = await resource.get("hub_1")
+        assert isinstance(result, Hub)
+        assert result.id == "hub_1"
+
+
+class TestHubViaClient:
+    """Tests that hub resources are accessible via the HarchOS client."""
+
+    def test_sync_client_has_hubs(self) -> None:
+        client = HarchOS(api_key="hsk_testapikey1234567890")
+        assert hasattr(client, "hubs")
+        assert isinstance(client.hubs, HubsResource)
+
+    def test_async_client_has_hubs(self) -> None:
+        client = AsyncHarchOS(api_key="hsk_testapikey1234567890")
+        assert hasattr(client, "hubs")
+        assert isinstance(client.hubs, AsyncHubsResource)

@@ -1,173 +1,120 @@
-"""Tests for the HarchOS authentication module."""
+"""Tests for the AuthResource module (v0.3).
+
+Auth is now handled via client.auth (AuthResource / AsyncAuthResource)
+instead of the removed Authenticator class.
+"""
 
 from __future__ import annotations
 
-import os
-import time
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from harchos.auth import Authenticator
-from harchos.errors import APIKeyExpiredError, InvalidAPIKeyError
+from harchos._client import HarchOS, AsyncHarchOS
+from harchos._types import UserInfo, APIKeyInfo
+from harchos.resources.auth import AuthResource, AsyncAuthResource
 
 
-class TestAuthenticatorInit:
-    """Tests for Authenticator initialization."""
+class TestAuthResource:
+    """Tests for the synchronous AuthResource."""
 
-    def test_with_api_key(self) -> None:
-        auth = Authenticator(api_key="hsk_testapikey1234567890")
-        assert auth.api_key == "hsk_testapikey1234567890"
+    def test_me(self) -> None:
+        client = MagicMock(spec=HarchOS)
+        client.request.return_value = {
+            "id": "usr_abc123",
+            "email": "test@harchos.ai",
+            "name": "Test User",
+            "plan": "community",
+        }
+        resource = AuthResource(client)
+        result = resource.me()
+        assert isinstance(result, UserInfo)
+        assert result.id == "usr_abc123"
+        assert result.email == "test@harchos.ai"
+        assert result.plan == "community"
+        client.request.assert_called_once_with("GET", "/auth/me")
 
-    def test_with_token(self) -> None:
-        auth = Authenticator(token="hst_sometoken123")
-        assert auth.token == "hst_sometoken123"
+    def test_create_api_key(self) -> None:
+        client = MagicMock(spec=HarchOS)
+        client.request.return_value = {
+            "id": "key_abc123",
+            "name": "my-key",
+            "prefix": "hsk_abcd",
+            "created_at": "2024-01-10T08:00:00Z",
+            "revoked": False,
+        }
+        resource = AuthResource(client)
+        result = resource.create_api_key("my-key")
+        assert isinstance(result, APIKeyInfo)
+        assert result.name == "my-key"
+        assert result.prefix == "hsk_abcd"
+        client.request.assert_called_once_with(
+            "POST", "/auth/api-keys", json={"name": "my-key"},
+        )
 
-    def test_empty(self) -> None:
-        auth = Authenticator()
-        assert auth.api_key is None
-        assert auth.token is None
-
-    def test_invalid_key_prefix(self) -> None:
-        with pytest.raises(InvalidAPIKeyError, match="must start with"):
-            Authenticator(api_key="invalid_key_1234567890")
-
-    def test_key_too_short(self) -> None:
-        with pytest.raises(InvalidAPIKeyError, match="at least"):
-            Authenticator(api_key="hsk_short")
-
-    def test_empty_key(self) -> None:
-        with pytest.raises(InvalidAPIKeyError, match="must not be empty"):
-            Authenticator(api_key="   ")
-
-
-class TestSetAPIKey:
-    """Tests for set_api_key method."""
-
-    def test_valid_key(self) -> None:
-        auth = Authenticator()
-        auth.set_api_key("hsk_anotherkey1234567890")
-        assert auth.api_key == "hsk_anotherkey1234567890"
-
-    def test_strips_whitespace(self) -> None:
-        auth = Authenticator()
-        auth.set_api_key("  hsk_anotherkey1234567890  ")
-        assert auth.api_key == "hsk_anotherkey1234567890"
-
-    def test_invalid_format(self) -> None:
-        auth = Authenticator()
-        with pytest.raises(InvalidAPIKeyError):
-            auth.set_api_key("bad_key")
+    def test_revoke_api_key(self) -> None:
+        client = MagicMock(spec=HarchOS)
+        client.request.return_value = {"deleted": True}
+        resource = AuthResource(client)
+        result = resource.revoke_api_key("key_abc123")
+        assert result == {"deleted": True}
+        client.request.assert_called_once_with("DELETE", "/auth/api-keys/key_abc123")
 
 
-class TestTokenManagement:
-    """Tests for token management."""
+class TestAsyncAuthResource:
+    """Tests for the asynchronous AsyncAuthResource."""
 
-    def test_set_token_with_expires_at(self) -> None:
-        auth = Authenticator()
-        expires = time.time() + 3600
-        auth.set_token("hst_token123", expires_at=expires)
-        assert auth.token == "hst_token123"
-        assert auth._token_expires_at == expires
+    @pytest.mark.asyncio
+    async def test_me(self) -> None:
+        client = MagicMock(spec=AsyncHarchOS)
+        client.request = AsyncMock(return_value={
+            "id": "usr_abc123",
+            "email": "test@harchos.ai",
+            "name": "Test User",
+            "plan": "community",
+        })
+        resource = AsyncAuthResource(client)
+        result = await resource.me()
+        assert isinstance(result, UserInfo)
+        assert result.id == "usr_abc123"
+        client.request.assert_called_once_with("GET", "/auth/me")
 
-    def test_set_token_with_ttl(self) -> None:
-        auth = Authenticator()
-        before = time.time()
-        auth.set_token("hst_token123", ttl=600)
-        after = time.time()
-        assert auth._token_expires_at is not None
-        assert before + 600 <= auth._token_expires_at <= after + 600
+    @pytest.mark.asyncio
+    async def test_create_api_key(self) -> None:
+        client = MagicMock(spec=AsyncHarchOS)
+        client.request = AsyncMock(return_value={
+            "id": "key_abc123",
+            "name": "my-key",
+            "prefix": "hsk_abcd",
+            "revoked": False,
+        })
+        resource = AsyncAuthResource(client)
+        result = await resource.create_api_key("my-key")
+        assert isinstance(result, APIKeyInfo)
+        assert result.name == "my-key"
+        client.request.assert_called_once_with(
+            "POST", "/auth/api-keys", json={"name": "my-key"},
+        )
 
-    def test_cannot_set_both_expires_and_ttl(self) -> None:
-        auth = Authenticator()
-        with pytest.raises(ValueError, match="not both"):
-            auth.set_token("hst_token123", expires_at=1000.0, ttl=600)
-
-    def test_is_token_expired_no_token(self) -> None:
-        auth = Authenticator()
-        assert auth.is_token_expired is True
-
-    def test_is_token_expired_future(self) -> None:
-        auth = Authenticator()
-        auth.set_token("hst_token123", ttl=3600)
-        assert auth.is_token_expired is False
-
-    def test_is_token_expired_past(self) -> None:
-        auth = Authenticator()
-        auth.set_token("hst_token123", expires_at=time.time() - 100)
-        assert auth.is_token_expired is True
-
-    def test_clear_token(self) -> None:
-        auth = Authenticator()
-        auth.set_token("hst_token123", ttl=3600)
-        auth.clear_token()
-        assert auth.token is None
-        assert auth._token_expires_at is None
-
-
-class TestGetHeaders:
-    """Tests for header construction."""
-
-    def test_api_key_header(self) -> None:
-        auth = Authenticator(api_key="hsk_testapikey1234567890")
-        headers = auth.get_headers()
-        assert headers["X-API-Key"] == "hsk_testapikey1234567890"
-
-    def test_token_header(self) -> None:
-        auth = Authenticator(api_key="hsk_testapikey1234567890")
-        auth.set_token("hst_token123", ttl=3600)
-        headers = auth.get_headers()
-        assert headers["Authorization"] == "Bearer hst_token123"
-        assert "X-API-Key" not in headers
-
-    def test_expired_token_falls_back_to_key(self) -> None:
-        auth = Authenticator(api_key="hsk_testapikey1234567890")
-        auth.set_token("hst_token123", expires_at=time.time() - 100)
-        headers = auth.get_headers()
-        assert headers["X-API-Key"] == "hsk_testapikey1234567890"
-
-    def test_expired_token_no_key_raises(self) -> None:
-        auth = Authenticator()
-        auth.set_token("hst_token123", expires_at=time.time() - 100)
-        with pytest.raises(APIKeyExpiredError):
-            auth.get_headers()
-
-    def test_no_credentials_empty_headers(self) -> None:
-        auth = Authenticator()
-        headers = auth.get_headers()
-        assert headers == {}
-
-    def test_token_preferred_over_key(self) -> None:
-        auth = Authenticator(api_key="hsk_testapikey1234567890")
-        auth.set_token("hst_token123", ttl=3600)
-        headers = auth.get_headers()
-        assert "Authorization" in headers
-        assert "X-API-Key" not in headers
+    @pytest.mark.asyncio
+    async def test_revoke_api_key(self) -> None:
+        client = MagicMock(spec=AsyncHarchOS)
+        client.request = AsyncMock(return_value={"deleted": True})
+        resource = AsyncAuthResource(client)
+        result = await resource.revoke_api_key("key_abc123")
+        assert result == {"deleted": True}
+        client.request.assert_called_once_with("DELETE", "/auth/api-keys/key_abc123")
 
 
-class TestRepr:
-    """Tests for Authenticator.__repr__."""
+class TestAuthViaClient:
+    """Tests that auth resources are accessible via the HarchOS client."""
 
-    def test_repr_with_key(self) -> None:
-        auth = Authenticator(api_key="hsk_testapikey1234567890")
-        r = repr(auth)
-        assert "Authenticator" in r
-        assert "hsk_test" in r
-        assert "7890" in r
+    def test_sync_client_has_auth(self) -> None:
+        client = HarchOS(api_key="hsk_testapikey1234567890")
+        assert hasattr(client, "auth")
+        assert isinstance(client.auth, AuthResource)
 
-    def test_repr_with_token(self) -> None:
-        auth = Authenticator(token="hst_token123")
-        r = repr(auth)
-        assert "token=***" in r
-
-
-class TestFromEnv:
-    """Tests for Authenticator.from_env class method."""
-
-    def test_from_env_with_key(self, clean_env: None) -> None:
-        os.environ["HARCHOS_API_KEY"] = "hsk_envtestkey123456789"
-        auth = Authenticator.from_env()
-        assert auth.api_key == "hsk_envtestkey123456789"
-
-    def test_from_env_without_key(self, clean_env: None) -> None:
-        auth = Authenticator.from_env()
-        assert auth.api_key is None
+    def test_async_client_has_auth(self) -> None:
+        client = AsyncHarchOS(api_key="hsk_testapikey1234567890")
+        assert hasattr(client, "auth")
+        assert isinstance(client.auth, AsyncAuthResource)

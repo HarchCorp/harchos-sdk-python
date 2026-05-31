@@ -1,137 +1,281 @@
-"""Tests for energy resource module."""
+"""Tests for the CarbonResource module (v0.3).
+
+Replaces the old test_energy.py which tested the removed EnergyResource.
+Carbon is now handled via client.carbon (CarbonResource / AsyncCarbonResource).
+"""
 
 from __future__ import annotations
 
-from typing import Any, Dict
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from harchos import HarchOSClient
-from harchos.models.energy import EnergyConsumption, EnergyReport, EnergySummary, GreenWindow
+from harchos._client import HarchOS, AsyncHarchOS
+from harchos._types import (
+    CarbonIntensity,
+    CarbonForecast,
+    CarbonDashboard,
+    CarbonOptimalHub,
+    CarbonOptimizeResult,
+)
+from harchos.resources.carbon import CarbonResource, AsyncCarbonResource
 
 
-class TestEnergyAsync:
-    """Tests for async energy operations."""
+class TestCarbonResource:
+    """Tests for the synchronous CarbonResource."""
 
-    @pytest.mark.asyncio
-    async def test_async_get_report(self, sample_energy_data: Dict[str, Any]) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        mock_response = MagicMock()
-        mock_response.json.return_value = sample_energy_data
-        with patch.object(
-            client._transport, "async_get", new_callable=AsyncMock, return_value=mock_response
-        ):
-            report = await client.energy.async_get_report("wl_abc123")
-            assert isinstance(report, EnergyReport)
-            assert report.resource_id == "wl_abc123"
-
-    @pytest.mark.asyncio
-    async def test_async_get_summary(self) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        summary_data = {
-            "total_kwh": 500.0,
-            "total_co2_grams": 150.0,
-            "average_pue": 1.2,
-            "average_renewable_fraction": 0.65,
-            "resource_count": 10,
-            "period_start": "2024-01-01T00:00:00Z",
-            "period_end": "2024-01-31T23:59:59Z",
+    def test_intensity(self) -> None:
+        client = MagicMock(spec=HarchOS)
+        client.request.return_value = {
+            "zone": "MA",
+            "zone_name": "Morocco",
+            "carbon_intensity_gco2_kwh": 150.0,
+            "renewable_percentage": 65.0,
+            "fossil_percentage": 35.0,
         }
-        mock_response = MagicMock()
-        mock_response.json.return_value = summary_data
-        with patch.object(
-            client._transport, "async_get", new_callable=AsyncMock, return_value=mock_response
-        ):
-            summary = await client.energy.async_get_summary(region="morocco")
-            assert isinstance(summary, EnergySummary)
-            assert summary.total_kwh == 500.0
+        resource = CarbonResource(client)
+        result = resource.intensity("MA")
+        assert isinstance(result, CarbonIntensity)
+        assert result.zone == "MA"
+        assert result.carbon_intensity_gco2_kwh == 150.0
+        assert result.is_green is True  # 150 < 200
+        client.request.assert_called_once_with("GET", "/carbon/intensity", params={"zone": "MA"})
 
-    @pytest.mark.asyncio
-    async def test_async_get_green_windows(self) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        windows_data = {
-            "items": [
+    def test_intensity_high_carbon(self) -> None:
+        client = MagicMock(spec=HarchOS)
+        client.request.return_value = {
+            "zone": "US",
+            "zone_name": "United States",
+            "carbon_intensity_gco2_kwh": 450.0,
+            "renewable_percentage": 25.0,
+            "fossil_percentage": 75.0,
+        }
+        resource = CarbonResource(client)
+        result = resource.intensity("US")
+        assert isinstance(result, CarbonIntensity)
+        assert result.is_green is False  # 450 >= 200
+
+    def test_optimize(self) -> None:
+        client = MagicMock(spec=HarchOS)
+        client.request.return_value = {
+            "action": "schedule",
+            "workload_name": "test-workload",
+            "selected_hub_id": "hub_xyz789",
+            "selected_hub_name": "morocco-primary",
+            "carbon_intensity_at_schedule_gco2_kwh": 120.0,
+            "carbon_saved_kg": 0.5,
+        }
+        resource = CarbonResource(client)
+        result = resource.optimize(
+            workload_name="test-workload",
+            gpu_count=2,
+            gpu_type="a100",
+        )
+        assert isinstance(result, CarbonOptimizeResult)
+        assert result.action == "schedule"
+        assert result.workload_name == "test-workload"
+        assert result.selected_hub_id == "hub_xyz789"
+
+    def test_optimize_with_defer(self) -> None:
+        client = MagicMock(spec=HarchOS)
+        client.request.return_value = {
+            "action": "defer",
+            "workload_name": "deferred-workload",
+            "deferred_hours": 3.5,
+            "reason": "Green window available in 3.5 hours",
+        }
+        resource = CarbonResource(client)
+        result = resource.optimize(workload_name="deferred-workload")
+        assert isinstance(result, CarbonOptimizeResult)
+        assert result.action == "defer"
+        assert result.deferred_hours == 3.5
+
+    def test_forecast(self) -> None:
+        client = MagicMock(spec=HarchOS)
+        client.request.return_value = {
+            "zone": "MA",
+            "zone_name": "Morocco",
+            "forecast": [
                 {
-                    "start": "2024-01-15T10:00:00Z",
-                    "end": "2024-01-15T14:00:00Z",
-                    "renewable_percentage": 85.0,
-                    "estimated_co2_grams_per_kwh": 50.0,
-                }
-            ]
+                    "timestamp": "2024-01-15T12:00:00Z",
+                    "carbon_intensity_gco2_kwh": 100.0,
+                    "renewable_percentage": 80.0,
+                    "is_green": True,
+                },
+            ],
+            "green_windows": [
+                {"start": "2024-01-15T10:00:00Z", "end": "2024-01-15T14:00:00Z"},
+            ],
         }
-        mock_response = MagicMock()
-        mock_response.json.return_value = windows_data
-        with patch.object(
-            client._transport, "async_get", new_callable=AsyncMock, return_value=mock_response
-        ):
-            windows = await client.energy.async_get_green_windows(region="morocco")
-            assert len(windows) == 1
-            assert isinstance(windows[0], GreenWindow)
+        resource = CarbonResource(client)
+        result = resource.forecast("MA")
+        assert isinstance(result, CarbonForecast)
+        assert result.zone == "MA"
+        assert len(result.forecast) == 1
+        assert result.best_window is not None
+        client.request.assert_called_once_with("GET", "/carbon/forecast", params={"zone": "MA"})
+
+    def test_forecast_no_green_windows(self) -> None:
+        client = MagicMock(spec=HarchOS)
+        client.request.return_value = {
+            "zone": "US",
+            "zone_name": "United States",
+            "forecast": [],
+            "green_windows": [],
+        }
+        resource = CarbonResource(client)
+        result = resource.forecast("US")
+        assert result.best_window is None
+
+    def test_dashboard(self) -> None:
+        client = MagicMock(spec=HarchOS)
+        client.request.return_value = {
+            "total_carbon_saved_kg": 150.0,
+            "total_workloads_optimized": 42,
+            "total_workloads_deferred": 10,
+            "avg_carbon_intensity_gco2_kwh": 130.0,
+            "best_hub_name": "morocco-primary",
+            "best_hub_carbon_intensity": 80.0,
+            "worst_hub_carbon_intensity": 500.0,
+        }
+        resource = CarbonResource(client)
+        result = resource.dashboard()
+        assert isinstance(result, CarbonDashboard)
+        assert result.total_carbon_saved_kg == 150.0
+        assert result.total_workloads_optimized == 42
+        client.request.assert_called_once_with("GET", "/carbon/dashboard")
+
+    def test_optimal_hub(self) -> None:
+        client = MagicMock(spec=HarchOS)
+        client.request.return_value = {
+            "recommended_hub_id": "hub_morocco1",
+            "recommended_hub_name": "morocco-primary",
+            "hub_region": "morocco",
+            "hub_zone": "MA",
+            "carbon_intensity_gco2_kwh": 80.0,
+            "renewable_percentage": 85.0,
+            "available_gpus": 4,
+            "action": "schedule",
+            "estimated_carbon_saved_kg": 0.3,
+        }
+        resource = CarbonResource(client)
+        result = resource.optimal_hub(gpu_count=2, gpu_type="a100")
+        assert isinstance(result, CarbonOptimalHub)
+        assert result.recommended_hub_id == "hub_morocco1"
+        assert result.is_deferred is False
+
+    def test_tracker_context_manager(self) -> None:
+        resource = CarbonResource(MagicMock(spec=HarchOS))
+        with resource.tracker() as tracker:
+            assert tracker.total_gco2 == 0.0
+            assert tracker.request_count == 0
+            tracker.record(gco2=1.5, region="morocco")
+            tracker.record(gco2=2.0, region="morocco")
+            assert tracker.total_gco2 == 3.5
+            assert tracker.request_count == 2
+            assert tracker.regions == ["morocco"]
+            assert tracker.avg_gco2_per_request == 1.75
+        # After exit, tracker is still accessible but detached
+        assert tracker.total_gco2 == 3.5
+
+    def test_tracker_multiple_regions(self) -> None:
+        resource = CarbonResource(MagicMock(spec=HarchOS))
+        with resource.tracker() as tracker:
+            tracker.record(gco2=1.0, region="morocco")
+            tracker.record(gco2=2.0, region="france")
+            assert len(tracker.regions) == 2
+            assert "morocco" in tracker.regions
+            assert "france" in tracker.regions
+
+    def test_tracker_repr(self) -> None:
+        resource = CarbonResource(MagicMock(spec=HarchOS))
+        with resource.tracker() as tracker:
+            tracker.record(gco2=1.5)
+            r = repr(tracker)
+            assert "CarbonTracker" in r
+            assert "1" in r  # request count
+
+
+class TestAsyncCarbonResource:
+    """Tests for the asynchronous AsyncCarbonResource."""
 
     @pytest.mark.asyncio
-    async def test_async_get_consumption(self) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        consumption_data = {
-            "kwh_consumed": 150.5,
-            "co2_grams": 45.2,
-            "pue": 1.15,
-            "renewable_fraction": 0.65,
-            "grid_intensity_gco2_kwh": 300.0,
-            "period_start": "2024-01-15T10:00:00Z",
-            "period_end": "2024-01-15T11:00:00Z",
-        }
-        mock_response = MagicMock()
-        mock_response.json.return_value = consumption_data
-        with patch.object(
-            client._transport, "async_get", new_callable=AsyncMock, return_value=mock_response
-        ):
-            ec = await client.energy.async_get_consumption("wl_abc123")
-            assert isinstance(ec, EnergyConsumption)
-            assert ec.kwh_consumed == 150.5
+    async def test_intensity(self) -> None:
+        client = MagicMock(spec=AsyncHarchOS)
+        client.request = AsyncMock(return_value={
+            "zone": "MA",
+            "zone_name": "Morocco",
+            "carbon_intensity_gco2_kwh": 150.0,
+            "renewable_percentage": 65.0,
+            "fossil_percentage": 35.0,
+        })
+        resource = AsyncCarbonResource(client)
+        result = await resource.intensity("MA")
+        assert isinstance(result, CarbonIntensity)
+        assert result.zone == "MA"
 
+    @pytest.mark.asyncio
+    async def test_optimize(self) -> None:
+        client = MagicMock(spec=AsyncHarchOS)
+        client.request = AsyncMock(return_value={
+            "action": "schedule",
+            "workload_name": "test-workload",
+            "selected_hub_id": "hub_xyz789",
+        })
+        resource = AsyncCarbonResource(client)
+        result = await resource.optimize(workload_name="test-workload")
+        assert isinstance(result, CarbonOptimizeResult)
+        assert result.action == "schedule"
 
-class TestEnergySync:
-    """Tests for sync energy operations."""
+    @pytest.mark.asyncio
+    async def test_forecast(self) -> None:
+        client = MagicMock(spec=AsyncHarchOS)
+        client.request = AsyncMock(return_value={
+            "zone": "MA",
+            "zone_name": "Morocco",
+            "forecast": [],
+            "green_windows": [],
+        })
+        resource = AsyncCarbonResource(client)
+        result = await resource.forecast("MA")
+        assert isinstance(result, CarbonForecast)
+        assert result.zone == "MA"
 
-    def test_get_report(self, sample_energy_data: Dict[str, Any]) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        mock_response = MagicMock()
-        mock_response.json.return_value = sample_energy_data
-        with patch.object(client._transport, "sync_get", return_value=mock_response):
-            report = client.energy.get_report("wl_abc123")
-            assert isinstance(report, EnergyReport)
+    @pytest.mark.asyncio
+    async def test_dashboard(self) -> None:
+        client = MagicMock(spec=AsyncHarchOS)
+        client.request = AsyncMock(return_value={
+            "total_carbon_saved_kg": 150.0,
+            "total_workloads_optimized": 42,
+        })
+        resource = AsyncCarbonResource(client)
+        result = await resource.dashboard()
+        assert isinstance(result, CarbonDashboard)
+        assert result.total_carbon_saved_kg == 150.0
 
-    def test_get_summary(self) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        summary_data = {
-            "total_kwh": 500.0,
-            "total_co2_grams": 150.0,
-            "average_pue": 1.2,
-            "average_renewable_fraction": 0.65,
-            "resource_count": 10,
-            "period_start": "2024-01-01T00:00:00Z",
-            "period_end": "2024-01-31T23:59:59Z",
-        }
-        mock_response = MagicMock()
-        mock_response.json.return_value = summary_data
-        with patch.object(client._transport, "sync_get", return_value=mock_response):
-            summary = client.energy.get_summary()
-            assert isinstance(summary, EnergySummary)
+    @pytest.mark.asyncio
+    async def test_optimal_hub(self) -> None:
+        client = MagicMock(spec=AsyncHarchOS)
+        client.request = AsyncMock(return_value={
+            "recommended_hub_id": "hub_morocco1",
+            "recommended_hub_name": "morocco-primary",
+            "hub_region": "morocco",
+            "hub_zone": "MA",
+            "carbon_intensity_gco2_kwh": 80.0,
+            "renewable_percentage": 85.0,
+            "available_gpus": 4,
+            "action": "schedule",
+        })
+        resource = AsyncCarbonResource(client)
+        result = await resource.optimal_hub(gpu_count=2)
+        assert isinstance(result, CarbonOptimalHub)
+        assert result.recommended_hub_id == "hub_morocco1"
 
-    def test_get_green_windows_list_format(self) -> None:
-        client = HarchOSClient(api_key="hsk_testapikey1234567890")
-        windows_data = [
-            {
-                "start": "2024-01-15T10:00:00Z",
-                "end": "2024-01-15T14:00:00Z",
-                "renewable_percentage": 85.0,
-                "estimated_co2_grams_per_kwh": 50.0,
-            }
-        ]
-        mock_response = MagicMock()
-        mock_response.json.return_value = windows_data
-        with patch.object(client._transport, "sync_get", return_value=mock_response):
-            windows = client.energy.get_green_windows(region="morocco")
-            assert len(windows) == 1
-            assert isinstance(windows[0], GreenWindow)
+    @pytest.mark.asyncio
+    async def test_tracker_context_manager(self) -> None:
+        resource = AsyncCarbonResource(MagicMock(spec=AsyncHarchOS))
+        async with resource.tracker() as tracker:
+            assert tracker.total_gco2 == 0.0
+            tracker.record(gco2=1.5, region="morocco")
+            assert tracker.total_gco2 == 1.5
+            assert tracker.request_count == 1

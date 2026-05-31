@@ -1,28 +1,17 @@
-"""Tests for the HarchOS error hierarchy."""
+"""Tests for the HarchOS exception hierarchy (v0.3)."""
 
 from __future__ import annotations
 
 import pytest
 
-from harchos.errors import (
-    APIKeyExpiredError,
+from harchos._exceptions import (
     AuthenticationError,
-    BadRequestError,
-    CarbonBudgetExceededError,
-    ConflictError,
-    DataResidencyError,
-    ForbiddenError,
     HarchOSError,
-    InternalServerError,
-    InvalidAPIKeyError,
+    InferenceError,
     NotFoundError,
-    PermissionDeniedError,
     RateLimitError,
-    ServiceUnavailableError,
-    SovereigntyError,
-    UnauthorizedError,
     ValidationError,
-    raise_for_status,
+    make_error,
 )
 
 
@@ -32,19 +21,24 @@ class TestHarchOSError:
     def test_default_message(self) -> None:
         err = HarchOSError()
         assert err.message == "An unknown error occurred"
-        assert err.code is None
+        assert err.code == "E0000"
+        assert err.title == "Unknown Error"
         assert err.status_code is None
+        assert err.headers == {}
+        assert err.body is None
 
     def test_custom_message(self) -> None:
         err = HarchOSError("Something went wrong")
-        assert str(err) == "Something went wrong"
+        assert err.message == "Something went wrong"
+        assert str(err) == "[E0000] Unknown Error — Something went wrong"
 
     def test_with_code(self) -> None:
-        err = HarchOSError("Bad stuff", code="bad_stuff")
-        assert str(err) == "[bad_stuff] Bad stuff"
+        err = HarchOSError("Bad stuff", code="bad_stuff", title="Bad Stuff")
+        assert err.code == "bad_stuff"
+        assert err.title == "Bad Stuff"
 
     def test_with_status_code(self) -> None:
-        err = HarchOSError("Not found", code="not_found", status_code=404)
+        err = HarchOSError("Not found", status_code=404)
         assert err.status_code == 404
 
     def test_with_headers_and_body(self) -> None:
@@ -56,161 +50,217 @@ class TestHarchOSError:
         assert err.headers["X-Request-Id"] == "abc"
         assert err.body == {"detail": "info"}
 
+    def test_detail_defaults_to_message(self) -> None:
+        err = HarchOSError("Something broke")
+        assert err.detail == "Something broke"
+
+    def test_custom_detail(self) -> None:
+        err = HarchOSError("Short", detail="A longer explanation of the error")
+        assert err.detail == "A longer explanation of the error"
+
+    def test_doc_url(self) -> None:
+        err = HarchOSError("Test", doc_url="https://docs.harchos.ai/errors/E0001")
+        assert err.doc_url == "https://docs.harchos.ai/errors/E0001"
+
     def test_repr(self) -> None:
-        err = HarchOSError("Test", code="test_code", status_code=500)
+        err = HarchOSError("Test", code="test_code", title="Test Title")
         r = repr(err)
         assert "HarchOSError" in r
         assert "test_code" in r
-        assert "500" in r
+        assert "Test Title" in r
 
     def test_is_exception(self) -> None:
         with pytest.raises(HarchOSError):
             raise HarchOSError("test")
 
+    def test_str_format(self) -> None:
+        err = HarchOSError("msg", code="E0400", title="Validation Error")
+        s = str(err)
+        assert "[E0400]" in s
+        assert "Validation Error" in s
+
 
 class TestErrorHierarchy:
     """Test that the error inheritance is correct."""
 
-    def test_authentication_errors(self) -> None:
-        assert issubclass(APIKeyExpiredError, AuthenticationError)
-        assert issubclass(InvalidAPIKeyError, AuthenticationError)
-        assert issubclass(PermissionDeniedError, AuthenticationError)
+    def test_authentication_error_inherits(self) -> None:
         assert issubclass(AuthenticationError, HarchOSError)
 
-    def test_sovereignty_errors(self) -> None:
-        assert issubclass(DataResidencyError, SovereigntyError)
-        assert issubclass(CarbonBudgetExceededError, SovereigntyError)
-        assert issubclass(SovereigntyError, HarchOSError)
-
-    def test_http_errors(self) -> None:
-        assert issubclass(BadRequestError, HarchOSError)
-        assert issubclass(UnauthorizedError, AuthenticationError)
-        assert issubclass(ForbiddenError, HarchOSError)
-        assert issubclass(NotFoundError, HarchOSError)
-        assert issubclass(ConflictError, HarchOSError)
+    def test_rate_limit_error_inherits(self) -> None:
         assert issubclass(RateLimitError, HarchOSError)
-        assert issubclass(InternalServerError, HarchOSError)
 
-    def test_api_key_expired_defaults(self) -> None:
-        err = APIKeyExpiredError()
-        assert err.code == "api_key_expired"
+    def test_not_found_error_inherits(self) -> None:
+        assert issubclass(NotFoundError, HarchOSError)
 
-    def test_invalid_api_key_defaults(self) -> None:
-        err = InvalidAPIKeyError()
-        assert err.code == "invalid_api_key"
+    def test_validation_error_inherits(self) -> None:
+        assert issubclass(ValidationError, HarchOSError)
 
-    def test_permission_denied_defaults(self) -> None:
-        err = PermissionDeniedError()
-        assert err.code == "permission_denied"
+    def test_inference_error_inherits(self) -> None:
+        assert issubclass(InferenceError, HarchOSError)
+
+    def test_all_catchable_by_base(self) -> None:
+        for exc_cls in [AuthenticationError, RateLimitError, NotFoundError,
+                        ValidationError, InferenceError]:
+            with pytest.raises(HarchOSError):
+                raise exc_cls()
+
+
+class TestAuthenticationError:
+    """Tests for AuthenticationError."""
+
+    def test_defaults(self) -> None:
+        err = AuthenticationError()
+        assert err.code == "E0401"
+        assert err.title == "Authentication Error"
+        assert err.status_code == 401
+        assert err.doc_url == "https://docs.harchos.ai/errors/E0401"
+
+    def test_custom_message(self) -> None:
+        err = AuthenticationError("Invalid API key")
+        assert err.message == "Invalid API key"
+        assert err.status_code == 401
+
+    def test_override_default_code(self) -> None:
+        err = AuthenticationError("test", code="CUSTOM")
+        assert err.code == "CUSTOM"
 
 
 class TestRateLimitError:
     """Tests for RateLimitError specific behaviour."""
+
+    def test_defaults(self) -> None:
+        err = RateLimitError()
+        assert err.code == "E0429"
+        assert err.title == "Rate Limit Error"
+        assert err.status_code == 429
+        assert err.retry_after is None
 
     def test_retry_after(self) -> None:
         err = RateLimitError(retry_after=5.0)
         assert err.retry_after == 5.0
         assert err.status_code == 429
 
-    def test_no_retry_after(self) -> None:
-        err = RateLimitError()
-        assert err.retry_after is None
 
-
-class TestCarbonBudgetExceededError:
-    """Tests for CarbonBudgetExceededError."""
-
-    def test_with_budget_info(self) -> None:
-        err = CarbonBudgetExceededError(
-            budget_grams=1000.0,
-            actual_grams=1200.0,
-        )
-        assert err.budget_grams == 1000.0
-        assert err.actual_grams == 1200.0
+class TestNotFoundError:
+    """Tests for NotFoundError."""
 
     def test_defaults(self) -> None:
-        err = CarbonBudgetExceededError()
-        assert err.budget_grams is None
-        assert err.actual_grams is None
+        err = NotFoundError()
+        assert err.code == "E0404"
+        assert err.title == "Not Found"
+        assert err.status_code == 404
 
-
-class TestDataResidencyError:
-    """Tests for DataResidencyError."""
-
-    def test_with_regions(self) -> None:
-        err = DataResidencyError(
-            required_region="morocco",
-            actual_region="us_east",
-        )
-        assert err.required_region == "morocco"
-        assert err.actual_region == "us_east"
+    def test_custom_message(self) -> None:
+        err = NotFoundError("Hub not found")
+        assert err.message == "Hub not found"
 
 
 class TestValidationError:
     """Tests for ValidationError."""
+
+    def test_defaults(self) -> None:
+        err = ValidationError()
+        assert err.code == "E0400"
+        assert err.title == "Validation Error"
+        assert err.status_code == 400
+        assert err.field is None
 
     def test_with_field(self) -> None:
         err = ValidationError(field="name")
         assert err.field == "name"
 
 
-class TestRaiseForStatus:
-    """Tests for the raise_for_status helper."""
+class TestInferenceError:
+    """Tests for InferenceError."""
 
-    def test_success_codes(self) -> None:
-        # Should not raise for 2xx codes
-        raise_for_status(200, "OK")
-        raise_for_status(201, "Created")
-        raise_for_status(204, "No Content")
+    def test_defaults(self) -> None:
+        err = InferenceError()
+        assert err.code == "E0500"
+        assert err.title == "Inference Error"
+        assert err.status_code == 500
 
-    def test_400_raises_bad_request(self) -> None:
-        with pytest.raises(BadRequestError):
-            raise_for_status(400, "Bad request")
+    def test_custom_message(self) -> None:
+        err = InferenceError("Model unavailable")
+        assert err.message == "Model unavailable"
 
-    def test_401_raises_unauthorized(self) -> None:
-        with pytest.raises(UnauthorizedError):
-            raise_for_status(401, "Unauthorized")
 
-    def test_403_raises_forbidden(self) -> None:
-        with pytest.raises(ForbiddenError):
-            raise_for_status(403, "Forbidden")
+class TestMakeError:
+    """Tests for the make_error factory function."""
 
-    def test_404_raises_not_found(self) -> None:
-        with pytest.raises(NotFoundError):
-            raise_for_status(404, "Not found")
+    def test_400_returns_validation_error(self) -> None:
+        err = make_error(400, message="Bad request")
+        assert isinstance(err, ValidationError)
+        assert err.status_code == 400
 
-    def test_429_raises_rate_limit(self) -> None:
-        with pytest.raises(RateLimitError):
-            raise_for_status(429, "Too many requests")
+    def test_401_returns_authentication_error(self) -> None:
+        err = make_error(401, message="Unauthorized")
+        assert isinstance(err, AuthenticationError)
+        assert err.status_code == 401
+
+    def test_404_returns_not_found_error(self) -> None:
+        err = make_error(404, message="Not found")
+        assert isinstance(err, NotFoundError)
+        assert err.status_code == 404
+
+    def test_422_returns_validation_error(self) -> None:
+        err = make_error(422, message="Unprocessable")
+        assert isinstance(err, ValidationError)
+        assert err.status_code == 422
+
+    def test_429_returns_rate_limit_error(self) -> None:
+        err = make_error(429, message="Too many requests")
+        assert isinstance(err, RateLimitError)
+        assert err.status_code == 429
 
     def test_429_extracts_retry_after(self) -> None:
-        with pytest.raises(RateLimitError) as exc_info:
-            raise_for_status(
-                429,
-                "Too many requests",
-                headers={"Retry-After": "30"},
-            )
-        assert exc_info.value.retry_after == 30.0
+        err = make_error(
+            429,
+            message="Too many requests",
+            headers={"retry-after": "30"},
+        )
+        assert isinstance(err, RateLimitError)
+        assert err.retry_after == 30.0
 
-    def test_500_raises_internal_server_error(self) -> None:
-        with pytest.raises(InternalServerError):
-            raise_for_status(500, "Internal server error")
+    def test_500_returns_inference_error(self) -> None:
+        err = make_error(500, message="Internal server error")
+        assert isinstance(err, InferenceError)
+        assert err.status_code == 500
 
-    def test_503_raises_service_unavailable(self) -> None:
-        with pytest.raises(ServiceUnavailableError):
-            raise_for_status(503, "Service unavailable")
+    def test_unknown_status_returns_base_error(self) -> None:
+        err = make_error(418, message="I'm a teapot")
+        assert isinstance(err, HarchOSError)
+        assert not isinstance(err, AuthenticationError)
+        assert err.status_code == 418
 
-    def test_unknown_status_raises_base(self) -> None:
-        with pytest.raises(HarchOSError):
-            raise_for_status(418, "I'm a teapot")
+    def test_extracts_structured_error_from_body(self) -> None:
+        err = make_error(
+            400,
+            message="Bad request",
+            body={"error": {"code": "E0401", "title": "Custom Title", "detail": "Custom detail"}},
+        )
+        assert err.code == "E0401"
+        assert err.title == "Custom Title"
+        assert err.detail == "Custom detail"
+
+    def test_extracts_flat_error_from_body(self) -> None:
+        err = make_error(
+            400,
+            message="Bad request",
+            body={"code": "CUSTOM_CODE", "title": "Flat Title"},
+        )
+        assert err.code == "CUSTOM_CODE"
+        assert err.title == "Flat Title"
 
     def test_passes_headers_and_body(self) -> None:
-        with pytest.raises(NotFoundError) as exc_info:
-            raise_for_status(
-                404,
-                "Not found",
-                headers={"X-Request-Id": "req123"},
-                body={"error": "resource missing"},
-            )
-        assert exc_info.value.headers["X-Request-Id"] == "req123"
-        assert exc_info.value.body == {"error": "resource missing"}
+        err = make_error(
+            404,
+            message="Not found",
+            headers={"X-Request-Id": "req123"},
+            body={"error": "resource missing"},
+        )
+        assert err.headers["X-Request-Id"] == "req123"
+        assert err.body == {"error": "resource missing"}
+
+    def test_default_message_from_status_code(self) -> None:
+        err = make_error(500)
+        assert err.message == "HTTP 500"

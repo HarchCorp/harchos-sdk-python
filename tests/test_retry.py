@@ -1,4 +1,4 @@
-"""Tests for the HarchOS retry logic."""
+"""Tests for the HarchOS retry logic (v0.3)."""
 
 from __future__ import annotations
 
@@ -6,13 +6,8 @@ import asyncio
 
 import pytest
 
-from harchos._retry import RetryConfig, retry_async, retry_sync
-from harchos.errors import (
-    HarchOSError,
-    InternalServerError,
-    RateLimitError,
-    ServiceUnavailableError,
-)
+from harchos._retry import RetryConfig, retry_async, retry_sync, DEFAULT_RETRYABLE_CODES
+from harchos._exceptions import HarchOSError, InferenceError, RateLimitError
 
 
 class TestRetryConfig:
@@ -24,8 +19,9 @@ class TestRetryConfig:
         assert config.base_delay == 0.5
         assert config.max_delay == 30.0
         assert config.jitter is True
-        assert 429 in config.retryable_status_codes
-        assert 500 in config.retryable_status_codes
+        assert config.retryable_codes == DEFAULT_RETRYABLE_CODES
+        assert 429 in config.retryable_codes
+        assert 500 in config.retryable_codes
 
     def test_compute_delay_first_attempt(self) -> None:
         config = RetryConfig(base_delay=1.0, jitter=False)
@@ -44,42 +40,30 @@ class TestRetryConfig:
         assert config.compute_delay(10) == 5.0
 
     def test_compute_delay_with_jitter(self) -> None:
-        config = RetryConfig(base_delay=1.0, jitter=True, jitter_range=0.5)
+        config = RetryConfig(base_delay=1.0, jitter=True)
         for _ in range(100):
             delay = config.compute_delay(0)
-            # base_delay + [0, jitter_range)
+            # base_delay + [0, 0.5) jitter
             assert 1.0 <= delay < 1.5
 
     def test_is_retryable_by_status_code(self) -> None:
         config = RetryConfig()
-        assert config.is_retryable(InternalServerError(status_code=500))
-        assert config.is_retryable(ServiceUnavailableError(status_code=503))
+        assert config.is_retryable(InferenceError(status_code=500))
 
     def test_is_not_retryable_client_error(self) -> None:
         config = RetryConfig()
         error = HarchOSError("Bad request", code="bad_request", status_code=400)
         assert not config.is_retryable(error)
 
-    def test_is_retryable_by_exception_type(self) -> None:
+    def test_is_not_retryable_no_status_code(self) -> None:
         config = RetryConfig()
-        assert config.is_retryable(InternalServerError())
-        assert config.is_retryable(ServiceUnavailableError())
-
-    def test_custom_predicate(self) -> None:
-        def always_retry(err: HarchOSError) -> bool:
-            return True
-
-        config = RetryConfig(custom_predicate=always_retry)
-        error = HarchOSError("any error")
-        assert config.is_retryable(error)
+        error = HarchOSError("Unknown error")
+        assert not config.is_retryable(error)
 
     def test_custom_status_codes(self) -> None:
-        config = RetryConfig(
-            retryable_status_codes={429, 502},
-            retryable_exceptions=set(),
-        )
+        config = RetryConfig(retryable_codes={429, 502})
         assert config.is_retryable(RateLimitError())
-        assert not config.is_retryable(InternalServerError())
+        assert not config.is_retryable(InferenceError())
 
     def test_zero_retries(self) -> None:
         config = RetryConfig(max_retries=0)
@@ -112,7 +96,7 @@ class TestRetryAsync:
             nonlocal call_count
             call_count += 1
             if call_count < 3:
-                raise InternalServerError()
+                raise InferenceError()
             return "success"
 
         result = await retry_async(fn, config=config)
@@ -124,9 +108,9 @@ class TestRetryAsync:
         config = RetryConfig(max_retries=2, base_delay=0.01, jitter=False)
 
         async def fn() -> str:
-            raise InternalServerError()
+            raise InferenceError()
 
-        with pytest.raises(InternalServerError):
+        with pytest.raises(InferenceError):
             await retry_async(fn, config=config)
 
     @pytest.mark.asyncio
@@ -164,26 +148,6 @@ class TestRetryAsync:
         # Should have waited at least retry_after_value
         assert elapsed >= retry_after_value * 0.8  # Allow some tolerance
 
-    @pytest.mark.asyncio
-    async def test_on_retry_callback(self) -> None:
-        config = RetryConfig(max_retries=2, base_delay=0.01, jitter=False)
-        retries_log: list[tuple[int, HarchOSError, float]] = []
-        call_count = 0
-
-        async def fn() -> str:
-            nonlocal call_count
-            call_count += 1
-            if call_count < 3:
-                raise InternalServerError()
-            return "ok"
-
-        def on_retry(attempt: int, error: HarchOSError, delay: float) -> None:
-            retries_log.append((attempt, error, delay))
-
-        await retry_async(fn, config=config, on_retry=on_retry)
-        assert len(retries_log) == 2
-        assert isinstance(retries_log[0][1], InternalServerError)
-
 
 class TestRetrySync:
     """Tests for retry_sync."""
@@ -209,7 +173,7 @@ class TestRetrySync:
             nonlocal call_count
             call_count += 1
             if call_count < 3:
-                raise InternalServerError()
+                raise InferenceError()
             return "success"
 
         result = retry_sync(fn, config=config)
@@ -220,7 +184,20 @@ class TestRetrySync:
         config = RetryConfig(max_retries=2, base_delay=0.01, jitter=False)
 
         def fn() -> str:
-            raise InternalServerError()
+            raise InferenceError()
 
-        with pytest.raises(InternalServerError):
+        with pytest.raises(InferenceError):
             retry_sync(fn, config=config)
+
+    def test_non_retryable_error_raised_immediately(self) -> None:
+        config = RetryConfig(max_retries=3)
+        call_count = 0
+
+        def fn() -> str:
+            nonlocal call_count
+            call_count += 1
+            raise HarchOSError("Not retryable", code="not_retryable")
+
+        with pytest.raises(HarchOSError):
+            retry_sync(fn, config=config)
+        assert call_count == 1
